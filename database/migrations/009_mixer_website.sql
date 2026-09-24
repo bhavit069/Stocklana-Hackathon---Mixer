@@ -1,0 +1,2 @@
+
+ALTER TABLE mixers ADD COLUMN IF NOT EXISTS website TEXT;
