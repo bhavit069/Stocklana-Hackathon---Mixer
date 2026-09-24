@@ -1,0 +1,190 @@
+{
+    "version": "0.1.0",
+    "name": "mixer_vault",
+    "programId": "",
+    "instructions": [
+        {
+            "name": "initializeMixer",
+            "accounts": [
+                {
+                    "name": "mixerState",
+                    "isMut": true,
+                    "isSigner": false
+                },
+                {
+                    "name": "mixerAuthority",
+                    "isMut": false,
+                    "isSigner": false
+                },
+                {
+                    "name": "creator",
+                    "isMut": true,
+                    "isSigner": true
+                },
+                {
+                    "name": "systemProgram",
+                    "isMut": false,
+                    "isSigner": false
+                }
+            ],
+            "args": [
+                {
+                    "name": "mixerSeed",
+                    "type": {
+                        "array": [
+                            "u8",
+                            32
+                        ]
+                    }
+                },
+                {
+                    "name": "creatorUuid",
+                    "type": "string"
+                },
+                {
+                    "name": "name",
+                    "type": "string"
+                },
+                {
+                    "name": "ticker",
+                    "type": "string"
+                },
+                {
+                    "name": "tokenCount",
+                    "type": "u8"
+                }
+            ]
+        },
+        {
+            "name": "createVault",
+            "accounts": [
+                {
+                    "name": "mixerState",
+                    "isMut": true,
+                    "isSigner": false
+                },
+                {
+                    "name": "mixerAuthority",
+                    "isMut": false,
+                    "isSigner": false
+                },
+                {
+                    "name": "vault",
+                    "isMut": true,
+                    "isSigner": false
+                },
+                {
+                    "name": "mint",
+                    "isMut": false,
+                    "isSigner": false
+                },
+                {
+                    "name": "payer",
+                    "isMut": true,
+                    "isSigner": true
+                },
+                {
+                    "name": "tokenProgram",
+                    "isMut": false,
+                    "isSigner": false
+                },
+                {
+                    "name": "systemProgram",
+                    "isMut": false,
+                    "isSigner": false
+                },
+                {
+                    "name": "rent",
+                    "isMut": false,
+                    "isSigner": false
+                }
+            ],
+            "args": []
+        },
+        {
+            "name": "withdrawFromVault",
+            "accounts": [
+                {
+                    "name": "mixerState",
+                    "isMut": true,
+                    "isSigner": false
+                },
+                {
+                    "name": "mixerAuthority",
+                    "isMut": false,
+                    "isSigner": false
+                },
+                {
+                    "name": "vault",
+                    "isMut": true,
+                    "isSigner": false
+                },
+                {
+                    "name": "destination",
+                    "isMut": true,
+                    "isSigner": false
+                },
+                {
+                    "name": "user",
+                    "isMut": true,
+                    "isSigner": true
+                },
+                {
+                    "name": "tokenProgram",
+                    "isMut": false,
+                    "isSigner": false
+                }
+            ],
+            "args": [
+                {
+                    "name": "amount",
+                    "type": "u64"
+                }
+            ]
+        }
+    ],
+    "accounts": [
+        {
+            "name": "MixerState",
+            "type": {
+                "kind": "struct",
+                "fields": [
+                    {
+                        "name": "creatorWallet",
+                        "type": "publicKey"
+                    },
+                    {
+                        "name": "creatorUuid",
+                        "type": "string"
+                    },
+                    {
+                        "name": "name",
+                        "type": "string"
+                    },
+                    {
+                        "name": "ticker",
+                        "type": "string"
+                    },
+                    {
+                        "name": "tokenCount",
+                        "type": "u8"
+                    },
+                    {
+                        "name": "bump",
+                        "type": "u8"
+                    }
+                ]
+            }
+        }
+    ],
+    "errors": [
+        {
+            "code": 6000,
+            "name": "UuidTooLong",
+            "msg": "Creator UUID too long"
+        }
+    ],
+    "metadata": {
+        "address": "6qtpr7cCfCy2jmtFyAUcGWpZYLji2UWk8sAWXGbfM5My"
+    }
+}

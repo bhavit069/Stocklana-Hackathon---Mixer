@@ -1,0 +1,1029 @@
+{
+  "version": "0.4.0",
+  "name": "mixer_vault",
+  "programId": "",
+  "instructions": [
+    {
+      "name": "initializeMixer",
+      "accounts": [
+        {
+          "name": "mixerState",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "mixerAuthority",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "treasury",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "creator",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "mixerSeed",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "creatorUuid",
+          "type": "string"
+        },
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "ticker",
+          "type": "string"
+        },
+        {
+          "name": "tokenCount",
+          "type": "u8"
+        },
+        {
+          "name": "tradeFeeBps",
+          "type": "u16"
+        },
+        {
+          "name": "creatorFeeShareBps",
+          "type": "u16"
+        }
+      ]
+    },
+    {
+      "name": "createVault",
+      "accounts": [
+        {
+          "name": "mixerState",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "mixerAuthority",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "vault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "vaultEntry",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "mint",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "creator",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "creatorWallet",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "weightBps",
+          "type": "u16"
+        }
+      ]
+    },
+    {
+      "name": "finalizeMixer",
+      "accounts": [
+        {
+          "name": "mixerState",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "creator",
+          "isMut": false,
+          "isSigner": true
+        }
+      ],
+      "args": [
+        {
+          "name": "totalWeightBps",
+          "type": "u16"
+        }
+      ]
+    },
+    {
+      "name": "trade",
+      "accounts": [
+        {
+          "name": "mixerState",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "vaultEntry",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "vault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "position",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "traderTokenAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "feeVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "feeLedger",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "mixerAuthority",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "mint",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "trader",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "withdrawFromVault",
+      "accounts": [
+        {
+          "name": "mixerState",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "mixerAuthority",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "vaultEntry",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "vault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "position",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "destination",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "mint",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "user",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "shares",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "claimFees",
+      "accounts": [
+        {
+          "name": "mixerState",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "mixerAuthority",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "feeLedger",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "feeVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "destination",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "mint",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "claimant",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "rebalanceWithdraw",
+      "accounts": [
+        {
+          "name": "mixerState",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "mixerAuthority",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "vaultEntry",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "vault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "routingAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "mint",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "creator",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "rebalanceSettle",
+      "accounts": [
+        {
+          "name": "mixerState",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "mixerAuthority",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "vaultEntry",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "vault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "routingAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "mint",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "creator",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "setVaultWeight",
+      "accounts": [
+        {
+          "name": "mixerState",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "vaultEntry",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "creator",
+          "isMut": false,
+          "isSigner": true
+        }
+      ],
+      "args": [
+        {
+          "name": "weightBps",
+          "type": "u16"
+        }
+      ]
+    },
+    {
+      "name": "closeVault",
+      "accounts": [
+        {
+          "name": "mixerState",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "mixerAuthority",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "vaultEntry",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "vault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "mint",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "creator",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "setFrozen",
+      "accounts": [
+        {
+          "name": "mixerState",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "creator",
+          "isMut": false,
+          "isSigner": true
+        }
+      ],
+      "args": [
+        {
+          "name": "frozen",
+          "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "buy",
+      "accounts": [
+        {
+          "name": "mixerState",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "position",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "trader",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "amounts",
+          "type": {
+            "vec": "u64"
+          }
+        }
+      ]
+    },
+    {
+      "name": "initFeeAccounts",
+      "accounts": [
+        {
+          "name": "mixerState",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "vaultEntry",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "feeVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "feeLedger",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "mixerAuthority",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "mint",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "payer",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "redeem",
+      "accounts": [
+        {
+          "name": "mixerState",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "mixerAuthority",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "position",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "user",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "shares",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "sweepVaultDust",
+      "accounts": [
+        {
+          "name": "mixerState",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "mixerAuthority",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "vaultEntry",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "vault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "destination",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "mint",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "creator",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": []
+    }
+  ],
+  "accounts": [
+    {
+      "name": "MixerState",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "creatorWallet",
+            "type": "publicKey"
+          },
+          {
+            "name": "treasury",
+            "type": "publicKey"
+          },
+          {
+            "name": "mixerSeed",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "creatorUuid",
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "name": "ticker",
+            "type": "string"
+          },
+          {
+            "name": "tokenCount",
+            "type": "u8"
+          },
+          {
+            "name": "vaultsCreated",
+            "type": "u8"
+          },
+          {
+            "name": "totalShares",
+            "type": "u64"
+          },
+          {
+            "name": "tradeFeeBps",
+            "type": "u16"
+          },
+          {
+            "name": "creatorFeeShareBps",
+            "type": "u16"
+          },
+          {
+            "name": "isFinalized",
+            "type": "bool"
+          },
+          {
+            "name": "isFrozen",
+            "type": "bool"
+          },
+          {
+            "name": "rebalanceInFlight",
+            "type": "u8"
+          },
+          {
+            "name": "stateBump",
+            "type": "u8"
+          },
+          {
+            "name": "authorityBump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "VaultEntry",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mixer",
+            "type": "publicKey"
+          },
+          {
+            "name": "mint",
+            "type": "publicKey"
+          },
+          {
+            "name": "vault",
+            "type": "publicKey"
+          },
+          {
+            "name": "weightBps",
+            "type": "u16"
+          },
+          {
+            "name": "totalDeposited",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "FeeLedger",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mixer",
+            "type": "publicKey"
+          },
+          {
+            "name": "mint",
+            "type": "publicKey"
+          },
+          {
+            "name": "creatorAccrued",
+            "type": "u64"
+          },
+          {
+            "name": "treasuryAccrued",
+            "type": "u64"
+          },
+          {
+            "name": "creatorClaimed",
+            "type": "u64"
+          },
+          {
+            "name": "treasuryClaimed",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "UserPosition",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "publicKey"
+          },
+          {
+            "name": "mixer",
+            "type": "publicKey"
+          },
+          {
+            "name": "shares",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "UuidTooLong",
+      "msg": "UuidTooLong"
+    },
+    {
+      "code": 6001,
+      "name": "NameTooLong",
+      "msg": "NameTooLong"
+    },
+    {
+      "code": 6002,
+      "name": "TickerTooLong",
+      "msg": "TickerTooLong"
+    },
+    {
+      "code": 6003,
+      "name": "InvalidTokenCount",
+      "msg": "InvalidTokenCount"
+    },
+    {
+      "code": 6004,
+      "name": "FeeTooHigh",
+      "msg": "FeeTooHigh"
+    },
+    {
+      "code": 6005,
+      "name": "InvalidFeeSplit",
+      "msg": "InvalidFeeSplit"
+    },
+    {
+      "code": 6006,
+      "name": "InvalidWeight",
+      "msg": "InvalidWeight"
+    },
+    {
+      "code": 6007,
+      "name": "WeightsDoNotSumToOne",
+      "msg": "WeightsDoNotSumToOne"
+    },
+    {
+      "code": 6008,
+      "name": "AllVaultsCreated",
+      "msg": "AllVaultsCreated"
+    },
+    {
+      "code": 6009,
+      "name": "VaultsIncomplete",
+      "msg": "VaultsIncomplete"
+    },
+    {
+      "code": 6010,
+      "name": "MixerNotFinalized",
+      "msg": "MixerNotFinalized"
+    },
+    {
+      "code": 6011,
+      "name": "MixerFrozen",
+      "msg": "MixerFrozen"
+    },
+    {
+      "code": 6012,
+      "name": "ZeroAmount",
+      "msg": "ZeroAmount"
+    },
+    {
+      "code": 6013,
+      "name": "AmountTooSmallAfterFee",
+      "msg": "AmountTooSmallAfterFee"
+    },
+    {
+      "code": 6014,
+      "name": "PayoutTooSmall",
+      "msg": "PayoutTooSmall"
+    },
+    {
+      "code": 6015,
+      "name": "InsufficientShares",
+      "msg": "InsufficientShares"
+    },
+    {
+      "code": 6016,
+      "name": "InsufficientVaultBalance",
+      "msg": "InsufficientVaultBalance"
+    },
+    {
+      "code": 6017,
+      "name": "VaultMixerMismatch",
+      "msg": "VaultMixerMismatch"
+    },
+    {
+      "code": 6018,
+      "name": "VaultMintMismatch",
+      "msg": "VaultMintMismatch"
+    },
+    {
+      "code": 6019,
+      "name": "DestinationNotOwned",
+      "msg": "DestinationNotOwned"
+    },
+    {
+      "code": 6020,
+      "name": "RoutingAccountNotOwned",
+      "msg": "RoutingAccountNotOwned"
+    },
+    {
+      "code": 6021,
+      "name": "NoRebalanceInFlight",
+      "msg": "NoRebalanceInFlight"
+    },
+    {
+      "code": 6022,
+      "name": "VaultNotEmpty",
+      "msg": "VaultNotEmpty"
+    },
+    {
+      "code": 6023,
+      "name": "SharesOutstanding",
+      "msg": "SharesOutstanding"
+    },
+    {
+      "code": 6024,
+      "name": "NothingToClaim",
+      "msg": "NothingToClaim"
+    },
+    {
+      "code": 6025,
+      "name": "Unauthorized",
+      "msg": "Unauthorized"
+    },
+    {
+      "code": 6026,
+      "name": "MathOverflow",
+      "msg": "MathOverflow"
+    },
+    {
+      "code": 6027,
+      "name": "NoVaultsProvided",
+      "msg": "No vault accounts were provided"
+    },
+    {
+      "code": 6028,
+      "name": "MalformedVaultAccounts",
+      "msg": "Vault accounts are not in the expected groups"
+    },
+    {
+      "code": 6029,
+      "name": "DuplicateVault",
+      "msg": "The same vault was supplied more than once"
+    },
+    {
+      "code": 6030,
+      "name": "BasketIncomplete",
+      "msg": "A buy must include every vault in the mixer"
+    },
+    {
+      "code": 6031,
+      "name": "UseBuyForBaskets",
+      "msg": "This mixer holds several tokens; buy with the buy instruction"
+    },
+    {
+      "code": 6032,
+      "name": "AmountsMismatch",
+      "msg": "One amount is required per vault"
+    },
+    {
+      "code": 6033,
+      "name": "FeeAccountMismatch",
+      "msg": "Fee vault or fee ledger does not belong to this mixer and mint"
+    }
+  ],
+  "metadata": {
+    "address": "6qtpr7cCfCy2jmtFyAUcGWpZYLji2UWk8sAWXGbfM5My"
+  }
+}
