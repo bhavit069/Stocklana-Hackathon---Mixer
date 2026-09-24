@@ -1,0 +1,1141 @@
+<%
+  function fmtSol(v) {
+    var n = Number(v) || 0;
+    var a = Math.abs(n);
+    if (a === 0) return '0';
+    if (a >= 1000) return (n / 1000).toFixed(1) + 'k';
+    if (a >= 10) return n.toFixed(1);
+    if (a >= 1) return n.toFixed(2);
+    return n.toFixed(3);
+  }
+  function fmtCap(v) {
+    var n = Number(v);
+    if (!isFinite(n) || n <= 0) return '—';
+    if (n >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
+    if (n >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M';
+    if (n >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K';
+    return '$' + n.toFixed(0);
+  }
+  function fmtPct(v) {
+    if (v === null || v === undefined) return '—';
+    var n = Number(v);
+    if (!isFinite(n)) return '—';
+    var a = Math.abs(n);
+    return (n >= 0 ? '+' : '−') + a.toFixed(a >= 100 ? 0 : 1) + '%';
+  }
+  function pctClass(v) {
+    if (v === null || v === undefined || !isFinite(Number(v))) return 'flat';
+    return Number(v) >= 0 ? 'up' : 'down';
+  }
+  function remain(ms) {
+    var n = Number(ms);
+    if (!isFinite(n) || n <= 0) return '0s';
+    var s = Math.floor(n / 1000);
+    var d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600);
+    var m = Math.floor((s % 3600) / 60), sec = s % 60;
+    if (d > 0) return d + 'd ' + h + 'h';
+    if (h > 0) return h + 'h ' + (m < 10 ? '0' : '') + m + 'm';
+    if (m > 0) return m + 'm ' + (sec < 10 ? '0' : '') + sec + 's';
+    return sec + 's';
+  }
+
+  function fuseLeft(c) {
+    if (!c.durationMs || !c.expiresAt) return 0;
+    var left = c.expiresAt - Date.now();
+    return Math.max(0, Math.min(100, (left / c.durationMs) * 100));
+  }
+
+  function isUrgent(c) {
+    var left = c.expiresAt - Date.now();
+    return left > 0 && (left < 300000 || (c.durationMs && left / c.durationMs < 0.2));
+  }
+  function isFresh(c) { return Date.now() - c.createdAt < 10 * 60 * 1000; }
+  function flames(level) { return level >= 3 ? '🔥🔥🔥' : level === 2 ? '🔥🔥' : level === 1 ? '🔥' : ''; }
+  var liveTotal = live.length;
+
+  var ICONS = {
+    pulse: '<path d="M2 12h4l2-7 4 14 3-9 2 2h5"/>',
+    coins: '<circle cx="9" cy="9" r="6.5"/><path d="M9 6.2v5.6M6.7 8h4.6M6.7 10h4.6"/>',
+    users: '<path d="M17 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 5 18.5V20"/><circle cx="9.5" cy="8" r="3.5"/><path d="M16 9.5a2.75 2.75 0 1 0 0-5.5"/><path d="M19.5 20v-1.5a3 3 0 0 0-2-2.83"/>',
+    trophy: '<path d="M8 4h8v4a4 4 0 0 1-8 0V4Z"/><path d="M8 5H5.5A1.5 1.5 0 0 0 4 6.5 3.5 3.5 0 0 0 7.5 10H8M16 5h2.5A1.5 1.5 0 0 1 20 6.5 3.5 3.5 0 0 1 16.5 10H16M12 12v4M9 20h6M10 16h4v2a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-2Z"/>',
+    bolt: '<path d="M13 3 4 14h6l-1 7 9-11h-6l1-7Z"/>',
+  };
+  function icon(name, cls) {
+    var body = ICONS[name] || '';
+    return '<svg class="icn' + (cls ? ' ' + cls : '') + '" width="13" height="13" viewBox="0 0 24 24" ' +
+      'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ' +
+      'aria-hidden="true">' + body + '</svg>';
+  }
+%>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Meme Mixers · Mixer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+
+    window.memeImgFallback = function (img) {
+      var box = document.createElement('span');
+      box.className = img.getAttribute('data-fb-class') || '';
+      box.textContent = img.getAttribute('data-fb') || '?';
+      img.replaceWith(box);
+    };
+  </script>
+  <style>
+    :root {
+      --bg: #0b0d10;
+      --panel: #101317;
+      --card: #13161b;
+      --card-hover: #171b21;
+      --stroke: rgba(255, 255, 255, .07);
+      --stroke-2: rgba(255, 255, 255, .12);
+      --text: #eef0f3;
+      --muted: #8b929c;
+      --dim: #5d646e;
+      --up: #22c55e;
+      --down: #f6465d;
+      --brand: #7453E2;
+      /* Meme mode's own identity: warm and loud, deliberately unlike the calm
+         violet of the long-term Markets page. */
+      --m1: #ffd23f;
+      --m2: #ff8a1f;
+      --m3: #ff4fa3;
+      --meme-grad: linear-gradient(120deg, var(--m1) 0%, var(--m2) 50%, var(--m3) 100%);
+    }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    .display { font-family: 'Bricolage Grotesque', 'Inter', sans-serif; letter-spacing: -.02em; }
+    .num { font-variant-numeric: tabular-nums; }
+    .up { color: var(--up); }
+    .down { color: var(--down); }
+    .flat { color: var(--muted); }
+    .icn { display: inline-block; vertical-align: -2px; flex-shrink: 0; }
+
+    /* ---------------- Trending ticker ---------------- */
+    .tt {
+      position: relative;
+      display: flex; align-items: center;
+      height: 46px;
+      border-bottom: 1px solid var(--stroke);
+      background: #0d0f13;
+      overflow: hidden;
+    }
+    .tt-viewport {
+      position: relative; flex: 1; min-width: 0; height: 100%;
+      overflow: hidden;
+      -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 24px, #000 calc(100% - 60px), transparent 100%);
+              mask-image: linear-gradient(90deg, transparent 0, #000 24px, #000 calc(100% - 60px), transparent 100%);
+    }
+    .tt-track {
+      display: flex; align-items: center; height: 100%;
+      width: max-content;
+      animation: tt-scroll var(--tt-dur, 80s) linear infinite;
+    }
+    /* Pausing on hover/focus belongs to the coins, not the whole strip: the
+       play button sits in the strip, and pressing Play must not leave the
+       ticker paused because the pointer and focus are still on the button. */
+    .tt-viewport:hover .tt-track, .tt-viewport:focus-within .tt-track { animation-play-state: paused; }
+    @keyframes tt-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+    .tt-item {
+      display: inline-flex; align-items: center; gap: 8px;
+      height: 30px; padding: 0 12px; margin-right: 6px;
+      border-radius: 999px;
+      font-size: 12.5px; white-space: nowrap;
+      color: var(--text); text-decoration: none;
+      transition: background .15s ease;
+    }
+    .tt-item:hover { background: rgba(255, 255, 255, .06); }
+    .tt-item img, .tt-fallback {
+      width: 20px; height: 20px; border-radius: 999px; object-fit: cover;
+      background: #1c2027; flex-shrink: 0;
+    }
+    .tt-fallback { display: inline-flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: var(--muted); }
+    .tt-sym { font-weight: 700; }
+    .tt-cap { color: var(--muted); }
+    .tt-cap b { color: var(--text); font-weight: 600; }
+    .tt-chg { font-weight: 600; font-size: 11.5px; }
+    .tt-empty { padding: 0 16px; font-size: 12px; color: var(--dim); }
+
+    /* ---------------- Hero ---------------- */
+    .eyebrow {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+      color: var(--m1);
+    }
+    .live-dot { width: 7px; height: 7px; border-radius: 999px; background: var(--up); box-shadow: 0 0 0 0 rgba(34, 197, 94, .6); animation: live-ping 1.8s ease-out infinite; }
+    @keyframes live-ping { 0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, .55); } 80%, 100% { box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); } }
+
+    .btn-meme {
+      display: inline-flex; align-items: center; gap: 8px;
+      height: 46px; padding: 0 20px;
+      border-radius: 14px;
+      font-weight: 700; font-size: 14.5px; color: #1a1204;
+      background: var(--meme-grad);
+      box-shadow: 0 8px 28px -10px rgba(255, 138, 31, .65), inset 0 1px 0 rgba(255, 255, 255, .35);
+      transition: transform .15s cubic-bezier(.34, 1.56, .64, 1), box-shadow .15s ease, filter .15s ease;
+    }
+    .btn-meme:hover { transform: translateY(-2px) scale(1.02); filter: saturate(1.1); }
+    .btn-meme:active { transform: translateY(0) scale(.98); }
+    .btn-ghost {
+      display: inline-flex; align-items: center; gap: 8px;
+      height: 46px; padding: 0 18px;
+      border-radius: 14px;
+      font-weight: 600; font-size: 14px; color: var(--text);
+      background: rgba(255, 255, 255, .04);
+      border: 1px solid var(--stroke-2);
+      transition: background .15s ease, border-color .15s ease, transform .15s ease;
+    }
+    .btn-ghost:hover:not(:disabled) { background: rgba(255, 255, 255, .08); border-color: rgba(255, 255, 255, .2); }
+    .btn-ghost:disabled { opacity: .45; cursor: not-allowed; }
+    .dice { display: inline-block; transition: transform .6s cubic-bezier(.34, 1.56, .64, 1); }
+    .dice.rolling { transform: rotate(720deg) scale(1.2); }
+
+    .stat {
+      padding: 16px 18px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, .025);
+      border: 1px solid var(--stroke);
+    }
+    .stat-k { font-size: 11.5px; color: var(--muted); font-weight: 500; }
+    .stat-v { font-size: 24px; font-weight: 700; margin-top: 4px; }
+
+    /* ---------------- King of the Hill ---------------- */
+    .king {
+      position: relative;
+      border-radius: 22px;
+      padding: 1.5px;
+      background: conic-gradient(from var(--spin, 0deg), var(--m1), var(--m2), var(--m3), var(--m1));
+      animation: king-spin 6s linear infinite;
+    }
+    @property --spin { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
+    @keyframes king-spin { to { --spin: 360deg; } }
+    .king-inner {
+      position: relative;
+      border-radius: 21px;
+      background: linear-gradient(180deg, #17140e 0%, #121418 55%);
+      padding: 20px;
+      overflow: hidden;
+    }
+    .king-crown { display: inline-block; animation: crown-bob 2.4s ease-in-out infinite; }
+    @keyframes crown-bob { 0%, 100% { transform: translateY(0) rotate(-6deg); } 50% { transform: translateY(-3px) rotate(6deg); } }
+    .king-tag { font-size: 11px; font-weight: 800; letter-spacing: .12em; color: var(--m1); }
+    .king-ret { font-size: 44px; line-height: 1; font-weight: 800; }
+
+    /* ---------------- Sort tabs ---------------- */
+    .tabs {
+      display: inline-flex; gap: 4px; padding: 4px; border-radius: 14px;
+      background: rgba(255, 255, 255, .03); border: 1px solid var(--stroke);
+      /* On a phone the row scrolls inside itself instead of widening the page. */
+      max-width: 100%; overflow-x: auto; scrollbar-width: none;
+    }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab {
+      flex-shrink: 0;
+      height: 32px; padding: 0 12px; border-radius: 10px;
+      font-size: 12.5px; font-weight: 600; color: var(--muted);
+      transition: background .15s ease, color .15s ease;
+      white-space: nowrap;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.is-active { background: rgba(255, 210, 63, .12); color: var(--m1); }
+    .tab .cnt { margin-left: 4px; font-size: 11px; color: var(--dim); font-weight: 500; }
+
+    /* ---------------- Run card ---------------- */
+    .grid-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; }
+    .mm-card {
+      position: relative;
+      display: flex; flex-direction: column; gap: 14px;
+      padding: 16px;
+      border-radius: 18px;
+      background: var(--card);
+      border: 1px solid var(--stroke);
+      transition: transform .18s cubic-bezier(.34, 1.56, .64, 1), border-color .18s ease, background .18s ease, box-shadow .18s ease;
+    }
+    .mm-card:hover { transform: translateY(-3px); background: var(--card-hover); border-color: rgba(255, 210, 63, .35); box-shadow: 0 14px 36px -18px rgba(255, 138, 31, .45); }
+    .mm-card.is-urgent { border-color: rgba(255, 79, 163, .45); }
+    .mm-card.is-urgent .mm-clock,
+    .mm-card-king.is-urgent .mm-clock { color: var(--m3); animation: clock-pulse 1s ease-in-out infinite; }
+    .mm-card.is-done, .mm-card-king.is-done { opacity: .55; }
+    @keyframes clock-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+    .mm-link { position: absolute; inset: 0; z-index: 1; border-radius: 18px; }
+    .mm-link:focus-visible { outline: 2px solid var(--m1); outline-offset: 2px; }
+    .mm-img {
+      width: 58px; height: 58px; border-radius: 16px; object-fit: cover;
+      background: #1c2027; border: 1px solid var(--stroke-2); flex-shrink: 0;
+    }
+    .mm-img-fallback { display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 20px; color: var(--m1); }
+    .mm-name { font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .mm-sub { font-size: 12px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .mm-sub b { color: var(--text); font-weight: 600; }
+    .sticker {
+      position: absolute; top: -7px; left: -7px; z-index: 2;
+      padding: 2px 6px; border-radius: 7px;
+      font-size: 9.5px; font-weight: 800; letter-spacing: .06em;
+      transform: rotate(-8deg);
+      box-shadow: 0 4px 10px -4px rgba(0, 0, 0, .6);
+    }
+    .sticker-new { background: var(--m1); color: #1a1204; }
+    /* Bottom-right, so a run that is both new and yours shows both. */
+    .sticker-mine { background: var(--brand); color: #fff; top: auto; bottom: -7px; left: auto; right: -9px; transform: rotate(6deg); }
+    .heat { font-size: 12px; letter-spacing: -2px; flex-shrink: 0; }
+
+    .stack { display: flex; align-items: center; }
+    .stack img, .stack .stack-more {
+      width: 22px; height: 22px; border-radius: 999px;
+      border: 2px solid var(--card);
+      background: #1c2027; object-fit: cover;
+      margin-left: -7px;
+    }
+    .stack img:first-child { margin-left: 0; }
+    .stack .stack-more { display: inline-flex; align-items: center; justify-content: center; font-size: 9.5px; font-weight: 700; color: var(--muted); }
+    .mm-card:hover .stack img, .mm-card:hover .stack .stack-more { border-color: var(--card-hover); }
+    .mm-syms { font-size: 11.5px; color: var(--muted); margin-left: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    .mm-ret { font-size: 26px; font-weight: 800; line-height: 1; }
+    .mm-clock { font-size: 19px; font-weight: 700; line-height: 1; }
+    .mm-lbl { font-size: 11px; color: var(--dim); margin-top: 5px; }
+
+    /* The fuse: what is left of the run, burning down from the right. */
+    .fuse { position: relative; height: 6px; border-radius: 999px; background: rgba(255, 255, 255, .05); }
+    .fuse-rope {
+      position: absolute; left: 0; top: 0; bottom: 0;
+      border-radius: 999px;
+      background: repeating-linear-gradient(90deg, var(--m1) 0 6px, var(--m2) 6px 12px);
+      transition: width 1s linear;
+    }
+    .fuse-spark {
+      position: absolute; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px;
+      border-radius: 999px;
+      background: radial-gradient(circle, #fff 0 20%, var(--m1) 35%, rgba(255, 138, 31, .0) 70%);
+      animation: spark 0.35s ease-in-out infinite alternate;
+      transition: left 1s linear;
+    }
+    @keyframes spark { from { transform: scale(.8); opacity: .8; } to { transform: scale(1.35); opacity: 1; } }
+    .is-urgent .fuse-rope { background: repeating-linear-gradient(90deg, var(--m3) 0 6px, var(--m2) 6px 12px); }
+
+    .mm-foot { display: flex; align-items: center; gap: 14px; font-size: 12px; color: var(--muted); }
+    .mm-foot b { color: var(--text); font-weight: 600; }
+    .mm-ape {
+      margin-left: auto; position: relative; z-index: 2;
+      display: inline-flex; align-items: center; gap: 4px;
+      height: 30px; padding: 0 12px; border-radius: 10px;
+      font-weight: 700; font-size: 12.5px; color: #1a1204;
+      background: var(--m1);
+      transition: transform .15s cubic-bezier(.34, 1.56, .64, 1), filter .15s ease;
+    }
+    .mm-ape:hover { transform: scale(1.06); filter: brightness(1.08); }
+
+    /* A trade just landed: the card jumps, pump.fun style. */
+    @keyframes bump {
+      0% { transform: translate(0, 0) rotate(0); }
+      15% { transform: translate(-3px, -2px) rotate(-1.4deg); }
+      30% { transform: translate(3px, 1px) rotate(1.2deg); }
+      45% { transform: translate(-2px, 1px) rotate(-.8deg); }
+      60% { transform: translate(2px, -1px) rotate(.6deg); }
+      100% { transform: translate(0, 0) rotate(0); }
+    }
+    .bump-buy { animation: bump .55s ease; box-shadow: 0 0 0 1px rgba(34, 197, 94, .7), 0 0 28px -4px rgba(34, 197, 94, .55) !important; }
+    .bump-sell { animation: bump .55s ease; box-shadow: 0 0 0 1px rgba(246, 70, 93, .7), 0 0 28px -4px rgba(246, 70, 93, .5) !important; }
+
+    /* ---------------- Rail ---------------- */
+    .rail-card { border-radius: 18px; background: var(--panel); border: 1px solid var(--stroke); }
+    .rail-head { display: flex; align-items: center; gap: 8px; padding: 14px 16px 10px; font-size: 13.5px; font-weight: 700; }
+    .live-badge {
+      margin-left: auto;
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 2px 8px; border-radius: 999px;
+      font-size: 10px; font-weight: 800; letter-spacing: .08em;
+      color: var(--up); background: rgba(34, 197, 94, .1); border: 1px solid rgba(34, 197, 94, .3);
+    }
+    .fd { list-style: none; margin: 0; padding: 0 8px 8px; max-height: 420px; overflow-y: auto; scrollbar-width: none; }
+    .fd::-webkit-scrollbar { display: none; }
+    .fd-item {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 9px 8px; border-radius: 12px;
+      font-size: 12.5px; line-height: 1.4;
+    }
+    .fd-item:hover { background: rgba(255, 255, 255, .03); }
+    .fd-item.is-new { animation: fd-in .45s cubic-bezier(.34, 1.56, .64, 1); background: rgba(255, 210, 63, .06); }
+    @keyframes fd-in { from { opacity: 0; transform: translateY(-10px) scale(.97); } to { opacity: 1; transform: none; } }
+    .fd-ico { width: 26px; height: 26px; border-radius: 9px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 13px; background: rgba(255, 255, 255, .05); }
+    .fd-body { flex: 1; min-width: 0; color: var(--muted); }
+    .fd-body b { color: var(--text); font-weight: 600; }
+    .fd-body a { color: var(--m1); font-weight: 600; }
+    .fd-body a:hover { text-decoration: underline; }
+    .fd-ago { font-size: 11px; color: var(--dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .fd-empty { padding: 26px 16px 30px; text-align: center; font-size: 12.5px; color: var(--dim); }
+
+    .lb-row { display: flex; align-items: center; gap: 10px; padding: 9px 16px; font-size: 12.5px; }
+    .lb-row + .lb-row { border-top: 1px solid var(--stroke); }
+    .lb-rank { width: 22px; text-align: center; font-size: 15px; flex-shrink: 0; }
+    .lb-rank.n { font-size: 12px; font-weight: 700; color: var(--dim); }
+    .lb-av { width: 28px; height: 28px; border-radius: 999px; object-fit: cover; background: #1c2027; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 11px; color: var(--muted); }
+
+    .degen-card {
+      border-radius: 18px; padding: 16px;
+      background: linear-gradient(160deg, rgba(116, 83, 226, .18), rgba(255, 79, 163, .08) 60%, rgba(16, 19, 23, 1));
+      border: 1px solid rgba(116, 83, 226, .3);
+    }
+    .degen-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+    .degen-grid > div { padding: 10px 12px; border-radius: 12px; background: rgba(0, 0, 0, .25); }
+    .degen-k { font-size: 10.5px; color: var(--muted); }
+    .degen-v { font-size: 16px; font-weight: 700; margin-top: 2px; }
+
+    /* ---------------- Archive ---------------- */
+    .ar-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 10px; }
+    .ar-card {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 14px; border-radius: 14px;
+      background: var(--card); border: 1px solid var(--stroke);
+      transition: background .15s ease, border-color .15s ease, transform .15s ease;
+    }
+    .ar-card:hover { background: var(--card-hover); border-color: var(--stroke-2); transform: translateY(-1px); }
+    .ar-img { width: 40px; height: 40px; border-radius: 12px; object-fit: cover; background: #1c2027; flex-shrink: 0; }
+    .ar-name { font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ar-sub { font-size: 11.5px; color: var(--dim); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .stamp {
+      flex-shrink: 0;
+      padding: 5px 9px; border-radius: 9px;
+      font-size: 12px; font-weight: 800;
+      transform: rotate(-3deg);
+      border: 1.5px dashed currentColor;
+    }
+    .stamp.win { color: var(--up); background: rgba(34, 197, 94, .08); }
+    .stamp.rekt { color: var(--down); background: rgba(246, 70, 93, .08); }
+    .stamp.paying { color: var(--m1); background: rgba(255, 210, 63, .08); animation: clock-pulse 1.4s ease-in-out infinite; }
+    .stamp.flat { color: var(--muted); background: rgba(255, 255, 255, .04); }
+
+    .empty-fun {
+      border: 1.5px dashed rgba(255, 210, 63, .25);
+      border-radius: 22px;
+      padding: 44px 20px;
+      text-align: center;
+      background: radial-gradient(420px 160px at 50% 0%, rgba(255, 210, 63, .06), transparent 70%);
+    }
+    .empty-emoji { font-size: 44px; display: inline-block; animation: crown-bob 2.6s ease-in-out infinite; }
+
+    .count-up { display: inline-block; }
+
+    /* Reduced motion: nothing shakes, spins or bobs, and hover lifts stay
+       put. The ticker still runs -- it is the page's headline -- but at half
+       speed, and it can always be paused with the button. A trade still
+       flashes its card; it just does not jolt it. */
+    @media (prefers-reduced-motion: reduce) {
+      .tt-track { animation-duration: calc(var(--tt-dur, 80s) * 2); }
+      .king, .king-crown, .empty-emoji, .fuse-spark { animation: none; }
+      .mm-card:hover, .btn-meme:hover, .mm-ape:hover { transform: none; }
+      .bump-buy, .bump-sell { animation: none; }
+    }
+    .tt.is-paused .tt-track { animation-play-state: paused; }
+    .tt-toggle {
+      position: relative; z-index: 2; flex-shrink: 0;
+      width: 30px; height: 30px; margin: 0 10px 0 4px;
+      border-radius: 999px;
+      display: inline-flex; align-items: center; justify-content: center;
+      color: var(--muted);
+      background: rgba(255, 255, 255, .05);
+      border: 1px solid var(--stroke-2);
+      transition: color .15s ease, background .15s ease;
+    }
+    .tt-toggle:hover { color: var(--text); background: rgba(255, 255, 255, .1); }
+  </style>
+</head>
+<body>
+
+  <%- include('partials/appnav', { user: user, active: 'meme' }) %>
+
+  <section class="tt" aria-label="Trending memecoins on Solana">
+    <div class="tt-viewport">
+      <% if (trending && trending.length) { %>
+        <div class="tt-track" id="ttTrack" style="--tt-dur: <%= Math.max(40, trending.length * 4.5) %>s">
+          <% [0, 1].forEach(function (copy) { %>
+            <% trending.forEach(function (t) { %>
+              <a class="tt-item" href="/mixer/create?type=meme&add=<%= encodeURIComponent(t.address) %>"
+                 data-addr="<%= t.address %>"
+                 title="Start a meme mixer with $<%= t.symbol %>"
+                 <%- copy ? 'aria-hidden="true" tabindex="-1"' : '' %>>
+                <img src="/images/tokens/<%= encodeURIComponent(t.address) %>" alt="" loading="lazy"
+                     data-fb="<%= (t.symbol || '?').charAt(0) %>" data-fb-class="tt-fallback" onerror="memeImgFallback(this)">
+                <span class="tt-sym">$<%= t.symbol %></span>
+                <span class="tt-cap">MC <b class="num" data-mcap><%= fmtCap(t.mcap) %></b></span>
+                <span class="tt-chg num <%= pctClass(t.change24h) %>" data-chg><%= fmtPct(t.change24h) %></span>
+              </a>
+            <% }) %>
+          <% }) %>
+        </div>
+      <% } else { %>
+        <div class="tt-empty h-full flex items-center">The trending feed is catching its breath. Back in a minute.</div>
+      <% } %>
+    </div>
+    <% if (trending && trending.length) { %>
+      <button type="button" class="tt-toggle" id="ttToggle" aria-pressed="false" aria-label="Pause the trending ticker" title="Pause">
+        <svg id="ttIcoPause" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+        <svg id="ttIcoPlay" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" hidden><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"/></svg>
+      </button>
+    <% } %>
+  </section>
+
+  <main class="max-w-[1500px] mx-auto px-6">
+
+    <section class="relative pt-10 pb-8">
+      <div class="relative">
+
+        <div class="flex flex-wrap items-center justify-between gap-6">
+          <div>
+            <span class="eyebrow"><span class="live-dot"></span>Meme mixers · on the clock</span>
+            <p class="text-[16px] text-[var(--text)] mt-2 font-medium">Baskets on a timer. Ape in. Watch it cook.</p>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-3">
+            <button type="button" id="degenBtn" class="btn-ghost" <%= liveTotal ? '' : 'disabled' %>
+                    title="<%= liveTotal ? 'Jump into a random live run' : 'Nothing is running yet' %>">
+              <span class="dice" id="dice">🎲</span> Feeling degen
+            </button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-8">
+          <div class="king">
+            <div class="king-inner">
+              <div class="flex items-center justify-between">
+                <span class="king-tag"><span class="king-crown">👑</span>&nbsp; KING OF THE HILL</span>
+                <% if (king) { %><span class="text-[11px] text-[var(--dim)]">best run still going</span><% } %>
+              </div>
+
+              <% if (king) { %>
+                <% var kUrgent = isUrgent(king); %>
+                <div class="mm-card-king mt-4 <%= kUrgent ? 'is-urgent' : '' %>"
+                     data-id="<%= king.id %>" data-name="<%= king.name %>" data-expires="<%= king.expiresAt %>" data-duration="<%= king.durationMs %>">
+                  <div class="flex items-center gap-4">
+                    <% if (king.image) { %>
+                      <img src="<%= king.image %>" alt="" class="w-[72px] h-[72px] rounded-[20px] object-cover border border-white/10 bg-[#1c2027]"
+                           onerror="this.style.visibility='hidden'">
+                    <% } %>
+                    <div class="min-w-0">
+                      <p class="display text-[24px] font-extrabold leading-tight truncate"><%= king.name %></p>
+                      <p class="text-[13px] text-[var(--muted)] mt-0.5">$<%= king.ticker %> · by <span class="text-white font-medium"><%= king.creator.name %></span></p>
+                    </div>
+                  </div>
+
+                  <div class="flex items-end justify-between mt-5">
+                    <div>
+                      <p class="king-ret num <%= pctClass(king.ret) %>"><%= fmtPct(king.ret) %></p>
+                      <p class="text-[11.5px] text-[var(--dim)] mt-1.5" title="Basket return since launch, before trading fees">since launch</p>
+                    </div>
+                    <div class="text-right">
+                      <p class="mm-clock num text-[24px]" data-clock><%= remain(king.expiresAt - Date.now()) %></p>
+                      <p class="text-[11.5px] text-[var(--dim)] mt-1.5">left<%= king.durationLabel ? ' of ' + king.durationLabel : '' %></p>
+                    </div>
+                  </div>
+
+                  <div class="fuse mt-4" data-fuse>
+                    <span class="fuse-rope" style="width: <%= fuseLeft(king).toFixed(2) %>%"></span>
+                    <span class="fuse-spark" style="left: <%= fuseLeft(king).toFixed(2) %>%"></span>
+                  </div>
+
+                  <div class="flex items-center gap-4 mt-5 text-[12.5px] text-[var(--muted)]">
+                    <span><%- icon('coins') %> <b class="text-white num" data-netsol="<%= king.netSol %>"><%= fmtSol(king.netSol) %></b> SOL in</span>
+                    <span><%- icon('users') %> <b class="text-white num"><%= king.investors %></b></span>
+                    <a href="/mixer/<%= king.id %>" class="btn-meme ml-auto" style="height: 40px; font-size: 13.5px;">Ape in →</a>
+                  </div>
+                </div>
+              <% } else { %>
+                <div class="text-center py-8">
+                  <div class="empty-emoji">🪑</div>
+                  <p class="display text-[22px] font-bold mt-3">The throne is empty</p>
+                  <p class="text-[13px] text-[var(--muted)] mt-1.5 max-w-[300px] mx-auto leading-relaxed">
+                    Launch a meme mixer and it's yours until someone out-cooks you.
+                  </p>
+                  <a href="/mixer/create?type=meme" class="btn-meme mt-5" style="height: 40px; font-size: 13.5px;">👑 Claim it</a>
+                </div>
+              <% } %>
+            </div>
+          </div>
+
+          <div class="degen-card">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] font-bold tracking-[.1em] text-[#c4b5fd]">🎖️ YOUR DEGEN CARD</span>
+              <span class="text-[11px] text-[var(--muted)]"><%= mine.created %> launched</span>
+            </div>
+            <p class="display text-[22px] font-extrabold mt-2"><%= mine.title %></p>
+            <div class="degen-grid">
+              <div><p class="degen-k">Runs joined</p><p class="degen-v num"><%= mine.runs %></p></div>
+              <div><p class="degen-k" title="Finished runs you were paid more on than you put in">Win rate</p><p class="degen-v num"><%= mine.winRate === null ? '—' : mine.winRate + '%' %></p></div>
+              <div><p class="degen-k" title="What you were paid out, minus what you put in, after trading fees">Settled P/L</p><p class="degen-v num <%= mine.closed ? pctClass(mine.pnlSol) : 'flat' %>"><%= mine.closed ? (mine.pnlSol >= 0 ? '+' : '−') + fmtSol(Math.abs(mine.pnlSol)) + ' SOL' : '—' %></p></div>
+              <div><p class="degen-k">Best run</p><p class="degen-v num <%= pctClass(mine.best) %>"><%= fmtPct(mine.best) %></p></div>
+            </div>
+            <% if (mine.closed) { %>
+              <p class="text-[11px] text-[var(--dim)] mt-3 leading-relaxed">Your numbers are cash: paid out minus paid in, after fees. A run's badge is its basket's return.</p>
+            <% } %>
+            <% if (!mine.runs) { %>
+              <p class="text-[12px] text-[var(--muted)] mt-3 leading-relaxed">Your first run is one click away. Pick one above and ape in.</p>
+            <% } else if (mine.live) { %>
+              <p class="text-[12px] text-[var(--muted)] mt-3"><b class="text-white"><%= mine.live %></b> of your runs <%= mine.live === 1 ? 'is' : 'are' %> still on the clock.</p>
+            <% } %>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-10">
+        <div class="stat">
+          <p class="stat-k"><%- icon('pulse') %> Live runs</p>
+          <p class="stat-v num"><span class="count-up" data-to="<%= stats.live %>"><%= stats.live %></span></p>
+        </div>
+        <div class="stat">
+          <p class="stat-k"><%- icon('coins') %> SOL in play</p>
+          <p class="stat-v num"><%= fmtSol(stats.solInPlay) %></p>
+        </div>
+        <div class="stat">
+          <p class="stat-k"><%- icon('users') %> Degens in</p>
+          <p class="stat-v num"><span class="count-up" data-to="<%= stats.degens %>"><%= stats.degens %></span></p>
+        </div>
+        <div class="stat">
+          <p class="stat-k"><%- icon('trophy') %> Best finish</p>
+          <p class="stat-v num <%= stats.biggestWin === null ? 'flat' : pctClass(stats.biggestWin) %>"><%= stats.biggestWin === null ? '—' : fmtPct(stats.biggestWin) %></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-6 pb-12">
+
+      <div class="min-w-0">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <h2 class="display text-[24px] font-extrabold flex items-center gap-2">
+            <%- icon('bolt') %> Live runs <span class="text-[14px] font-semibold text-[var(--dim)] num">(<%= liveTotal %>)</span>
+          </h2>
+          <% if (liveTotal > 1) { %>
+            <div class="tabs" role="tablist" aria-label="Sort live runs">
+              <button type="button" class="tab is-active" data-sort="hot" role="tab" aria-selected="true">🔥 Hot</button>
+              <button type="button" class="tab" data-sort="ending" role="tab" aria-selected="false">⏳ Ending soon</button>
+              <button type="button" class="tab" data-sort="fresh" role="tab" aria-selected="false">🌱 Fresh</button>
+              <button type="button" class="tab" data-sort="gainers" role="tab" aria-selected="false">🚀 Top gainers</button>
+            </div>
+          <% } %>
+        </div>
+
+        <% if (!liveTotal) { %>
+          <div class="empty-fun">
+            <div class="empty-emoji">🦗</div>
+            <p class="display text-[24px] font-bold mt-3">Quiet in here&hellip; too quiet</p>
+            <p class="text-[13.5px] text-[var(--muted)] mt-2 max-w-[440px] mx-auto leading-relaxed">
+              No runs on the clock right now. Start one &mdash; pick a few coins from the trending strip,
+              set a timer, and let the degens find it.
+            </p>
+            <a href="/mixer/create?type=meme" class="btn-meme mt-6">🚀 Start the first run</a>
+          </div>
+        <% } else { %>
+          <div class="grid-cards" id="liveGrid">
+            <% live.forEach(function (c) {
+                 var urgent = isUrgent(c);
+                 var left = fuseLeft(c);
+            %>
+              <article class="mm-card <%= urgent ? 'is-urgent' : '' %>"
+                       data-id="<%= c.id %>"
+                       data-name="<%= c.name %>"
+                       data-expires="<%= c.expiresAt %>"
+                       data-duration="<%= c.durationMs || '' %>"
+                       data-created="<%= c.createdAt %>"
+                       data-ret="<%= c.ret === null ? '' : c.ret %>"
+                       data-hot="<%= (c.heat.volume1h || 0) + (c.heat.trades1h || 0) * 0.01 + c.netSol * 0.001 %>">
+                <a class="mm-link" href="/mixer/<%= c.id %>" aria-label="Open <%= c.name %>"></a>
+
+                <div class="flex items-start gap-3">
+                  <div class="relative shrink-0">
+                    <% if (c.image) { %>
+                      <img class="mm-img" src="<%= c.image %>" alt="" loading="lazy"
+                           data-fb="<%= (c.ticker || '?').charAt(0) %>" data-fb-class="mm-img mm-img-fallback" onerror="memeImgFallback(this)">
+                    <% } else { %>
+                      <div class="mm-img mm-img-fallback"><%= (c.ticker || '?').charAt(0) %></div>
+                    <% } %>
+                    <% if (isFresh(c)) { %><span class="sticker sticker-new">NEW</span><% } %>
+                    <% if (c.isMine) { %><span class="sticker sticker-mine">YOURS</span><% } %>
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-2">
+                      <h3 class="mm-name"><%= c.name %></h3>
+                      <% if (c.heat.level) { %>
+                        <span class="heat" title="<%= c.heat.trades1h %> trade<%= c.heat.trades1h === 1 ? '' : 's' %> in the last hour"><%= flames(c.heat.level) %></span>
+                      <% } %>
+                    </div>
+                    <p class="mm-sub">$<%= c.ticker %> · by <b><%= c.creator.name %></b></p>
+                    <div class="flex items-center mt-2 min-w-0">
+                      <div class="stack">
+                        <% c.tokens.slice(0, 4).forEach(function (t) { %>
+                          <img src="/images/tokens/<%= t.address %>" alt="" title="<%= t.symbol %> · <%= Math.round(t.weight * 100) %>%" loading="lazy" onerror="this.style.visibility='hidden'">
+                        <% }) %>
+                        <% if (c.tokens.length > 4) { %><span class="stack-more">+<%= c.tokens.length - 4 %></span><% } %>
+                      </div>
+                      <span class="mm-syms"><%= c.tokens.slice(0, 3).map(function (t) { return t.symbol; }).join(' · ') %></span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flex items-end justify-between">
+                  <div>
+                    <p class="mm-ret num <%= pctClass(c.ret) %>"><%= c.ret === null ? 'pricing…' : fmtPct(c.ret) %></p>
+                    <p class="mm-lbl" title="Basket return since launch, before trading fees">since launch</p>
+                  </div>
+                  <div class="text-right">
+                    <p class="mm-clock num" data-clock><%= remain(c.expiresAt - Date.now()) %></p>
+                    <p class="mm-lbl">left<%= c.durationLabel ? ' of ' + c.durationLabel : '' %></p>
+                  </div>
+                </div>
+
+                <div class="fuse" data-fuse aria-hidden="true">
+                  <span class="fuse-rope" style="width: <%= left.toFixed(2) %>%"></span>
+                  <span class="fuse-spark" style="left: <%= left.toFixed(2) %>%"></span>
+                </div>
+
+                <div class="mm-foot">
+                  <span><%- icon('coins') %> <b class="num" data-netsol="<%= c.netSol %>"><%= fmtSol(c.netSol) %></b> SOL in</span>
+                  <span title="Wallets that have bought in"><%- icon('users') %> <b class="num"><%= c.investors %></b></span>
+                  <a class="mm-ape" href="/mixer/<%= c.id %>">Ape in →</a>
+                </div>
+              </article>
+            <% }) %>
+          </div>
+        <% } %>
+      </div>
+
+      <aside class="flex flex-col gap-4 min-w-0">
+        <div class="rail-card">
+          <div class="rail-head"><%- icon('bolt') %> Live feed <span class="live-badge"><span class="live-dot" style="width:6px;height:6px"></span>LIVE</span></div>
+          <ul class="fd" id="feed" aria-live="polite"></ul>
+        </div>
+
+        <div class="rail-card">
+          <div class="rail-head">🏆 Hall of fame <span class="ml-auto text-[11px] font-medium text-[var(--dim)]">best run</span></div>
+          <% if (!leaders.length) { %>
+            <p class="fd-empty">No legends yet. Launch a run and get on the board.</p>
+          <% } else { %>
+            <div class="pb-2">
+              <% leaders.forEach(function (l, i) { %>
+                <div class="lb-row">
+                  <span class="lb-rank <%= i > 2 ? 'n' : '' %>"><%= i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1) %></span>
+                  <% if (l.creator.avatar) { %>
+                    <img class="lb-av" src="<%= l.creator.avatar %>" alt="" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'">
+                  <% } else { %>
+                    <span class="lb-av"><%= l.creator.name.replace('@', '').charAt(0).toUpperCase() %></span>
+                  <% } %>
+                  <div class="min-w-0 flex-1">
+                    <p class="font-semibold truncate"><%= l.creator.name %></p>
+                    <p class="text-[11px] text-[var(--dim)]"><%= l.runs %> run<%= l.runs === 1 ? '' : 's' %><%= l.bestTicker ? ' · best $' + l.bestTicker : '' %></p>
+                  </div>
+                  <span class="num font-bold <%= pctClass(l.best) %>"><%= fmtPct(l.best) %></span>
+                </div>
+              <% }) %>
+            </div>
+          <% } %>
+        </div>
+      </aside>
+    </section>
+
+    <section class="pb-16" id="archive">
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div>
+          <h2 class="display text-[24px] font-extrabold">🏁 Finished runs</h2>
+          <p class="text-[13px] text-[var(--muted)] mt-0.5">Every run that hit zero, and how it ended.</p>
+        </div>
+        <div class="tabs" role="tablist" aria-label="Filter finished runs">
+          <button type="button" class="tab is-active" data-filter="all" role="tab" aria-selected="true">All<span class="cnt num"><%= archiveCounts.all %></span></button>
+          <button type="button" class="tab" data-filter="winners" role="tab" aria-selected="false">🏆 Winners<span class="cnt num"><%= archiveCounts.winners %></span></button>
+          <button type="button" class="tab" data-filter="rekt" role="tab" aria-selected="false">💀 Rekt<span class="cnt num"><%= archiveCounts.rekt %></span></button>
+          <button type="button" class="tab" data-filter="paying" role="tab" aria-selected="false">💸 Paying out<span class="cnt num"><%= archiveCounts.paying %></span></button>
+        </div>
+      </div>
+
+      <div class="ar-grid" id="arGrid"></div>
+      <p class="fd-empty hidden" id="arEmpty"></p>
+      <div class="flex justify-center mt-5">
+        <button type="button" id="arMore" class="btn-ghost hidden" style="height: 40px; font-size: 13px;">Load more</button>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    window.MEME = <%- JSON.stringify({
+      feed: feed,
+      archive: archive,
+      archiveTotal: archiveTotal,
+      me: walletAddress || null,
+      live: live.map(function (c) { return { id: c.id, ticker: c.ticker, image: c.image }; }),
+    }).replace(/</g, '\\u003c') %>;
+  </script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/alerts.js"></script>
+  <script>
+  (function () {
+    var M = window.MEME || {};
+    var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    function fmtSol(v) {
+      var n = Number(v) || 0, a = Math.abs(n);
+      if (a === 0) return '0';
+      if (a >= 1000) return (n / 1000).toFixed(1) + 'k';
+      if (a >= 10) return n.toFixed(1);
+      if (a >= 1) return n.toFixed(2);
+      return n.toFixed(3);
+    }
+    function fmtPct(v) {
+      if (v === null || v === undefined || !isFinite(Number(v))) return '—';
+      var n = Number(v), a = Math.abs(n);
+      return (n >= 0 ? '+' : '−') + a.toFixed(a >= 100 ? 0 : 1) + '%';
+    }
+    function fmtCap(v) {
+      var n = Number(v);
+      if (!isFinite(n) || n <= 0) return '—';
+      if (n >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
+      if (n >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M';
+      if (n >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K';
+      return '$' + n.toFixed(0);
+    }
+    function remain(ms) {
+      if (!isFinite(ms) || ms <= 0) return '0s';
+      var s = Math.floor(ms / 1000);
+      var d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600);
+      var m = Math.floor((s % 3600) / 60), sec = s % 60;
+      if (d > 0) return d + 'd ' + h + 'h';
+      if (h > 0) return h + 'h ' + (m < 10 ? '0' : '') + m + 'm';
+      if (m > 0) return m + 'm ' + (sec < 10 ? '0' : '') + sec + 's';
+      return sec + 's';
+    }
+    function ago(ts) {
+      var s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+      if (s < 60) return s + 's';
+      if (s < 3600) return Math.floor(s / 60) + 'm';
+      if (s < 86400) return Math.floor(s / 3600) + 'h';
+      return Math.floor(s / 86400) + 'd';
+    }
+    function shortWallet(w) { return w ? String(w).slice(0, 4) + '…' + String(w).slice(-4) : 'someone'; }
+    function el(tag, cls, text) {
+      var e = document.createElement(tag);
+      if (cls) e.className = cls;
+      if (text !== undefined && text !== null) e.textContent = text;
+      return e;
+    }
+
+    (function () {
+      var tt = document.querySelector('.tt');
+      var btn = document.getElementById('ttToggle');
+      if (!tt || !btn) return;
+      function set(paused) {
+        tt.classList.toggle('is-paused', paused);
+        btn.setAttribute('aria-pressed', paused ? 'true' : 'false');
+        btn.setAttribute('aria-label', paused ? 'Play the trending ticker' : 'Pause the trending ticker');
+        btn.title = paused ? 'Play' : 'Pause';
+        document.getElementById('ttIcoPause').hidden = paused;
+        document.getElementById('ttIcoPlay').hidden = !paused;
+      }
+      var saved = false;
+      try { saved = localStorage.getItem('mixer.tickerPaused') === '1'; } catch (e) {  }
+      set(saved);
+      btn.addEventListener('click', function () {
+        var paused = !tt.classList.contains('is-paused');
+        set(paused);
+        try { localStorage.setItem('mixer.tickerPaused', paused ? '1' : '0'); } catch (e) {  }
+      });
+    })();
+
+    var timed = Array.prototype.slice.call(document.querySelectorAll('.mm-card[data-expires], .mm-card-king[data-expires]'));
+    var announced = {};
+    function tick() {
+      var now = Date.now();
+      timed.forEach(function (card) {
+        var exp = Number(card.dataset.expires);
+        var dur = Number(card.dataset.duration);
+        if (!exp) return;
+        var left = exp - now;
+        var clock = card.querySelector('[data-clock]');
+        var rope = card.querySelector('.fuse-rope');
+        var spark = card.querySelector('.fuse-spark');
+
+        if (left <= 0) {
+          if (clock) clock.textContent = '💥 time!';
+          if (rope) rope.style.width = '0%';
+          if (spark) spark.style.display = 'none';
+          card.classList.remove('is-urgent');
+          card.classList.add('is-done');
+          if (!announced[card.dataset.id] && window.Alerts) {
+            announced[card.dataset.id] = true;
+            var name = card.dataset.name || 'A run';
+            window.Alerts.info('⏰ ' + name + ' just hit zero', { detail: 'Holders are being paid out. It moves to Finished runs once settled.' });
+          }
+          return;
+        }
+        if (clock) clock.textContent = remain(left);
+        var pct = dur ? Math.max(0, Math.min(100, (left / dur) * 100)) : 0;
+        if (rope) rope.style.width = pct.toFixed(2) + '%';
+        if (spark) spark.style.left = pct.toFixed(2) + '%';
+        card.classList.toggle('is-urgent', left < 300000 || (dur && left / dur < 0.2));
+      });
+    }
+    tick();
+    setInterval(tick, 1000);
+
+    {
+      document.querySelectorAll('.count-up').forEach(function (n) {
+        var to = Number(n.dataset.to) || 0;
+        if (to <= 0) return;
+        var t0 = performance.now(), dur = 900;
+        (function step(t) {
+          var k = Math.min(1, (t - t0) / dur);
+          n.textContent = Math.round(to * (1 - Math.pow(1 - k, 3)));
+          if (k < 1) requestAnimationFrame(step);
+        })(t0);
+      });
+    }
+
+    var grid = document.getElementById('liveGrid');
+    var SORTS = {
+      hot: function (a, b) { return Number(b.dataset.hot) - Number(a.dataset.hot); },
+      ending: function (a, b) { return Number(a.dataset.expires) - Number(b.dataset.expires); },
+      fresh: function (a, b) { return Number(b.dataset.created) - Number(a.dataset.created); },
+      gainers: function (a, b) {
+        var x = a.dataset.ret === '' ? -Infinity : Number(a.dataset.ret);
+        var y = b.dataset.ret === '' ? -Infinity : Number(b.dataset.ret);
+        return y - x;
+      },
+    };
+    function applySort(key) {
+      if (!grid || !SORTS[key]) return;
+      var cards = Array.prototype.slice.call(grid.children);
+      cards.sort(SORTS[key]).forEach(function (c) { grid.appendChild(c); });
+      document.querySelectorAll('.tab[data-sort]').forEach(function (t) {
+        var on = t.dataset.sort === key;
+        t.classList.toggle('is-active', on);
+        t.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+      try { localStorage.setItem('mixer.memeSort', key); } catch (e) {  }
+    }
+    document.querySelectorAll('.tab[data-sort]').forEach(function (t) {
+      t.addEventListener('click', function () { applySort(t.dataset.sort); });
+    });
+    try {
+      var saved = localStorage.getItem('mixer.memeSort');
+      applySort(SORTS[saved] ? saved : 'hot');
+    } catch (e) { applySort('hot'); }
+
+    var degenBtn = document.getElementById('degenBtn');
+    if (degenBtn) degenBtn.addEventListener('click', function () {
+      var pool = M.live || [];
+      if (!pool.length) return;
+      var pick = pool[Math.floor(Math.random() * pool.length)];
+      var dice = document.getElementById('dice');
+      if (dice && !reduceMotion) dice.classList.add('rolling');
+      degenBtn.disabled = true;
+      setTimeout(function () { window.location.href = '/mixer/' + pick.id; }, reduceMotion ? 0 : 650);
+    });
+
+    var feed = document.getElementById('feed');
+    var tickers = {};
+    (M.live || []).forEach(function (c) { tickers[c.id] = c; });
+    (M.archive || []).forEach(function (c) { tickers[c.id] = tickers[c.id] || c; });
+
+    function feedItem(ev, fresh) {
+      var li = el('li', 'fd-item' + (fresh ? ' is-new' : ''));
+      var ico = el('span', 'fd-ico', ev.kind === 'buy' ? '🟢' : ev.kind === 'sell' ? '🔴' : ev.kind === 'launch' ? '🚀' : '🏁');
+      var body = el('div', 'fd-body');
+      var link = el('a', null, '$' + ev.ticker);
+      link.href = '/mixer/' + ev.mixerId;
+
+      if (ev.kind === 'buy' || ev.kind === 'sell') {
+        body.appendChild(el('b', null, ev.who));
+        body.appendChild(document.createTextNode(ev.kind === 'buy' ? ' aped ' : ' took '));
+        body.appendChild(el('b', 'num', fmtSol(ev.sol) + ' SOL'));
+        body.appendChild(document.createTextNode(ev.kind === 'buy' ? ' into ' : ' out of '));
+        body.appendChild(link);
+      } else if (ev.kind === 'launch') {
+        body.appendChild(el('b', null, ev.who));
+        body.appendChild(document.createTextNode(' launched '));
+        body.appendChild(link);
+        if (ev.durationLabel) body.appendChild(document.createTextNode(' · ' + ev.durationLabel + ' run'));
+      } else {
+        body.appendChild(link);
+        body.appendChild(document.createTextNode(' settled '));
+        var r = el('b', 'num ' + (ev.ret === null || ev.ret === undefined ? '' : ev.ret >= 0 ? 'up' : 'down'),
+          ev.ret === null || ev.ret === undefined ? '' : fmtPct(ev.ret));
+        body.appendChild(r);
+      }
+      var t = el('time', 'fd-ago', ago(ev.ts));
+      t.dataset.ts = ev.ts;
+      li.appendChild(ico); li.appendChild(body); li.appendChild(t);
+      return li;
+    }
+    function renderFeed() {
+      if (!feed) return;
+      feed.innerHTML = '';
+      if (!(M.feed || []).length) {
+        var empty = el('li', 'fd-empty', '🦗 Nothing yet. The first ape gets a front-row seat.');
+        empty.id = 'feedEmpty';
+        feed.appendChild(empty);
+        return;
+      }
+      M.feed.slice(0, 20).forEach(function (ev) { feed.appendChild(feedItem(ev, false)); });
+    }
+    renderFeed();
+    setInterval(function () {
+      document.querySelectorAll('.fd-ago[data-ts]').forEach(function (t) { t.textContent = ago(Number(t.dataset.ts)); });
+    }, 10000);
+
+    function bump(id, side, sol) {
+      document.querySelectorAll('[data-id="' + id + '"]').forEach(function (card) {
+        var cls = side === 'sell' ? 'bump-sell' : 'bump-buy';
+        card.classList.remove('bump-buy', 'bump-sell');
+        void card.offsetWidth;
+        card.classList.add(cls);
+        setTimeout(function () { card.classList.remove(cls); }, 900);
+        var n = card.querySelector('[data-netsol]');
+        if (n) {
+          var v = Number(n.dataset.netsol || 0) + (side === 'sell' ? -sol : sol);
+          n.dataset.netsol = v;
+          n.textContent = fmtSol(v);
+        }
+      });
+    }
+    if (typeof io !== 'undefined') {
+      try {
+        var socket = io();
+        socket.on('mixer:trade', function (t) {
+          if (!t || !tickers[t.mixerId]) return;
+          var c = tickers[t.mixerId];
+          var sol = Number(t.solAmount) || 0;
+          bump(t.mixerId, t.side, sol);
+          if (!feed) return;
+          var empty = document.getElementById('feedEmpty');
+          if (empty) empty.remove();
+          feed.insertBefore(feedItem({
+            kind: t.side === 'sell' ? 'sell' : 'buy',
+            ts: Number(t.ts) || Date.now(),
+            mixerId: t.mixerId, ticker: c.ticker,
+            sol: sol,
+            who: M.me && t.wallet === M.me ? 'You' : shortWallet(t.wallet),
+          }, true), feed.firstChild);
+          while (feed.children.length > 25) feed.removeChild(feed.lastChild);
+        });
+      } catch (e) {  }
+    }
+
+    setInterval(function () {
+      if (document.visibilityState !== 'visible') return;
+      fetch('/api/meme/trending', { headers: { Accept: 'application/json' } })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) {
+          if (!d || !d.coins) return;
+          var by = {};
+          d.coins.forEach(function (c) { by[c.address] = c; });
+          document.querySelectorAll('.tt-item[data-addr]').forEach(function (a) {
+            var c = by[a.dataset.addr];
+            if (!c) return;
+            var cap = a.querySelector('[data-mcap]');
+            var chg = a.querySelector('[data-chg]');
+            if (cap) cap.textContent = fmtCap(c.mcap);
+            if (chg) {
+              chg.textContent = fmtPct(c.change24h);
+              chg.className = 'tt-chg num ' + (c.change24h === null ? 'flat' : c.change24h >= 0 ? 'up' : 'down');
+            }
+          });
+        })
+        .catch(function () {  });
+    }, 90000);
+
+    var arGrid = document.getElementById('arGrid');
+    var arMore = document.getElementById('arMore');
+    var arEmpty = document.getElementById('arEmpty');
+    var arState = { filter: 'all', next: (M.archive || []).length < (M.archiveTotal || 0) ? (M.archive || []).length : null, busy: false };
+    var EMPTY_COPY = {
+      all: '⏳ Nothing has finished yet. The first run to hit zero lands here.',
+      winners: '🏆 No winners yet. Someone has to be first.',
+      rekt: '💀 Nobody has been rekt yet. Give it time.',
+      paying: '💸 Nothing is paying out right now.',
+    };
+
+    function arCard(c) {
+      var a = el('a', 'ar-card');
+      a.href = '/mixer/' + c.id;
+      if (c.image) {
+        var img = el('img', 'ar-img');
+        img.src = c.image; img.alt = ''; img.loading = 'lazy';
+        img.onerror = function () { img.style.visibility = 'hidden'; };
+        a.appendChild(img);
+      } else {
+        var ph = el('div', 'ar-img mm-img-fallback', (c.ticker || '?').charAt(0));
+        ph.style.fontSize = '15px';
+        a.appendChild(ph);
+      }
+      var mid = el('div', 'min-w-0 flex-1');
+      var nm = el('p', 'ar-name', c.name);
+      var tk = el('span', 'text-[var(--dim)] font-medium', '  $' + c.ticker);
+      nm.appendChild(tk);
+      var when = c.settledAt || c.expiresAt;
+      var sub = [
+        (c.durationLabel ? c.durationLabel + ' run' : 'run'),
+        when ? new Date(when).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : null,
+        fmtSol(c.investedSol) + ' SOL in',
+        c.investors + ' degen' + (c.investors === 1 ? '' : 's'),
+      ].filter(Boolean).join(' · ');
+      mid.appendChild(nm);
+      mid.appendChild(el('p', 'ar-sub', sub));
+      a.appendChild(mid);
+
+      var stamp;
+      if (c.state === 'expired') stamp = el('span', 'stamp paying', '💸 Paying out');
+      else if (c.ret === null) stamp = el('span', 'stamp flat', '🏁 Settled');
+      else if (c.ret > 0) stamp = el('span', 'stamp win num', '🏆 ' + fmtPct(c.ret));
+      else stamp = el('span', 'stamp rekt num', '💀 ' + fmtPct(c.ret));
+      if (c.ret !== null && c.state !== 'expired') stamp.title = 'Basket return from launch to the deadline, before trading fees';
+      a.appendChild(stamp);
+      return a;
+    }
+    function renderArchive(items, append) {
+      if (!append) arGrid.innerHTML = '';
+      items.forEach(function (c) { tickers[c.id] = tickers[c.id] || c; arGrid.appendChild(arCard(c)); });
+      var none = !arGrid.children.length;
+      arEmpty.textContent = EMPTY_COPY[arState.filter];
+      arEmpty.classList.toggle('hidden', !none);
+      arMore.classList.toggle('hidden', arState.next === null);
+    }
+    function loadArchive(filter, offset) {
+      if (arState.busy) return;
+      arState.busy = true;
+      arMore.disabled = true;
+      fetch('/api/meme/archive?filter=' + encodeURIComponent(filter) + '&offset=' + offset, { headers: { Accept: 'application/json' } })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (!d || !d.ok) throw new Error((d && d.error) || 'failed');
+          arState.filter = filter;
+          arState.next = d.next;
+          renderArchive(d.items, offset > 0);
+        })
+        .catch(function () {
+          if (window.Alerts) window.Alerts.error('Could not load finished runs', { detail: 'Try again in a moment.' });
+        })
+        .finally(function () { arState.busy = false; arMore.disabled = false; });
+    }
+    document.querySelectorAll('.tab[data-filter]').forEach(function (t) {
+      t.addEventListener('click', function () {
+        document.querySelectorAll('.tab[data-filter]').forEach(function (x) {
+          var on = x === t;
+          x.classList.toggle('is-active', on);
+          x.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        loadArchive(t.dataset.filter, 0);
+      });
+    });
+    arMore.addEventListener('click', function () {
+      if (arState.next !== null) loadArchive(arState.filter, arState.next);
+    });
+    renderArchive(M.archive || [], false);
+  })();
+  </script>
+</body>
+</html>

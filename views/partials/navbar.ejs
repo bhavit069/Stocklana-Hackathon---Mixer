@@ -1,0 +1,178 @@
+<nav
+    class="w-full bg-surface border-b border-gray-800 h-16 px-6 flex items-center justify-between sticky top-0 z-50 backdrop-blur-md bg-opacity-90">
+
+    <div class="flex items-center gap-8">
+        <a href="/mixers" class="flex items-center gap-2">
+            <div
+                class="w-8 h-8 bg-gradient-to-tr from-primary to-purple-600 rounded-lg flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-primary/20">
+                A
+            </div>
+            <span class="text-white font-bold text-lg tracking-tight">AuthApp</span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-6">
+            <a href="/mixers" class="text-textSecondary hover:text-white font-medium text-sm transition-colors">Mixers</a>
+            <a href="/meme" class="text-textSecondary hover:text-white font-medium text-sm transition-colors">Meme</a>
+
+            <a href="/portfolio" class="text-white font-medium text-sm transition-colors">Portfolio</a>
+        </div>
+    </div>
+
+    <div class="flex items-center gap-4">
+
+        <div class="relative group/wallet py-2">
+            <button
+                class="flex items-center gap-2 bg-black/40 hover:bg-black/60 border border-gray-800 rounded-full px-4 py-1.5 transition-all">
+                <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                <span id="nav-balance-display" class="text-white font-mono text-sm font-medium">0.00 SOL</span>
+            </button>
+
+            <div
+                class="absolute top-full right-0 pt-2 w-72 opacity-0 invisible group-hover/wallet:opacity-100 group-hover/wallet:visible transition-all duration-200 transform translate-y-2 group-hover/wallet:translate-y-0 z-50">
+                <div class="bg-surface border border-gray-800 rounded-2xl shadow-2xl p-5 relative overflow-hidden">
+                    <div class="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent pointer-events-none">
+                    </div>
+
+                    <div class="relative z-10">
+                        <div class="flex items-center justify-between mb-4">
+                            <span class="text-textSecondary text-xs font-bold tracking-wider uppercase">SOL
+                                Wallet</span>
+                            <span
+                                class="bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded">MAINNET</span>
+                        </div>
+
+                        <div class="flex items-center justify-between bg-black/30 rounded-lg px-3 py-2 border border-gray-800 mb-5 group/copy cursor-pointer transition-colors hover:bg-black/50"
+                            onclick="copyAddress()">
+                            <span id="nav-address-display" class="font-mono text-xs text-gray-300">...</span>
+                            <svg class="w-4 h-4 text-textSecondary group-hover/copy:text-white transition-colors"
+                                fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z">
+                                </path>
+                            </svg>
+                        </div>
+
+                        <div class="text-center mb-6">
+                            <div class="flex justify-center mb-2">
+                                <img src="https://cryptologos.cc/logos/solana-sol-logo.png?v=024" alt="SOL"
+                                    class="w-10 h-10 rounded-full shadow-lg shadow-primary/20">
+                            </div>
+                            <h2 id="nav-balance-dropdown" class="text-3xl font-bold text-white tracking-tight">0 SOL
+                            </h2>
+                            <p id="nav-fiat-dropdown" class="text-textSecondary font-medium">$ 0.00</p>
+                        </div>
+
+                        <button
+                            class="w-full bg-white hover:bg-gray-100 text-black font-bold py-2.5 rounded-xl transition-colors shadow-lg shadow-white/5 active:scale-95 transform duration-150">
+                            Add Cash
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="navTicker" class="hidden lg:flex items-center gap-3 px-3 py-1.5 rounded-lg bg-[#15161A] border border-[#2C2C2C]">
+            <div class="flex items-center gap-1.5" title="Solana">
+                <span class="text-[10px] font-semibold text-gray-500 tracking-wide">SOL</span>
+                <span id="tickSolPrice" class="text-xs font-semibold text-white tabular-nums">&mdash;</span>
+                <span id="tickSolChange" class="text-[10px] font-medium tabular-nums text-gray-500"></span>
+            </div>
+            <span class="w-px h-3.5 bg-[#2C2C2C]"></span>
+            <div class="flex items-center gap-1.5" title="Bitcoin">
+                <span class="text-[10px] font-semibold text-gray-500 tracking-wide">BTC</span>
+                <span id="tickBtcPrice" class="text-xs font-semibold text-white tabular-nums">&mdash;</span>
+                <span id="tickBtcChange" class="text-[10px] font-medium tabular-nums text-gray-500"></span>
+            </div>
+        </div>
+
+        <div class="relative">
+            <button onclick="toggleProfileMenu()"
+                class="relative w-10 h-10 rounded-full overflow-hidden border-2 border-gray-800 hover:border-white transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-black">
+                <% if (user.xProfilePicture) { %>
+                    <img src="<%= user.xProfilePicture %>" alt="User" class="w-full h-full object-cover">
+                    <% } else { %>
+                        <div class="w-full h-full bg-gray-800 flex items-center justify-center text-white font-bold">
+                            <%= user.username.charAt(0).toUpperCase() %>
+                        </div>
+                        <% } %>
+            </button>
+
+            <div id="profile-menu"
+                class="hidden absolute top-full right-0 mt-3 w-48 bg-surface border border-gray-800 rounded-xl shadow-xl overflow-hidden py-1 z-50">
+                <div class="px-4 py-3 border-b border-gray-800">
+                    <p class="text-white text-sm font-medium truncate">
+                        <%= user.username %>
+                    </p>
+                    <p class="text-textSecondary text-xs truncate">
+                        <%= user.email || 'X User' %>
+                    </p>
+                </div>
+                <a href="#"
+                    class="block px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-surfaceHighlight transition-colors">Settings</a>
+                <a href="/logout"
+                    class="block px-4 py-2.5 text-sm text-red-400 hover:text-red-300 hover:bg-surfaceHighlight transition-colors">Log
+                    Out</a>
+            </div>
+        </div>
+    </div>
+</nav>
+
+<script>
+
+    async function updateBalance() {
+        try {
+            const res = await fetch('/wallet/balance-api');
+            if (!res.ok) throw new Error('Network response was not ok');
+            const data = await res.json();
+
+            document.getElementById('nav-balance-display').textContent = `${data.balance} SOL`;
+
+            document.getElementById('nav-balance-dropdown').textContent = `${data.balance} SOL`;
+            document.getElementById('nav-fiat-dropdown').textContent = `$ ${data.usdValue}`;
+
+            if (data.address) {
+                const start = data.address.substring(0, 4);
+                const end = data.address.substring(data.address.length - 4);
+                document.getElementById('nav-address-display').textContent = `${start}...${end}`;
+                document.getElementById('nav-address-display').dataset.full = data.address;
+            }
+
+        } catch (err) {
+            console.error('Balance update failed:', err);
+        }
+    }
+
+    updateBalance();
+
+    setInterval(updateBalance, 15000);
+
+    function toggleProfileMenu() {
+        const menu = document.getElementById('profile-menu');
+        menu.classList.toggle('hidden');
+    }
+
+    document.addEventListener('click', function (event) {
+        const menu = document.getElementById('profile-menu');
+        const button = document.querySelector('button[onclick="toggleProfileMenu()"]');
+        if (!menu.classList.contains('hidden') && !menu.contains(event.target) && !button.contains(event.target)) {
+            menu.classList.add('hidden');
+        }
+    });
+
+    function copyAddress() {
+        const el = document.getElementById('nav-address-display');
+        const addr = el.dataset.full;
+        if (addr) {
+            navigator.clipboard.writeText(addr);
+
+            const original = el.textContent;
+            el.textContent = "Copied!";
+            el.classList.add('text-green-400');
+            setTimeout(() => {
+                el.textContent = original;
+                el.classList.remove('text-green-400');
+            }, 1500);
+        }
+    }
+</script>
+<script src="/js/navticker.js"></script>

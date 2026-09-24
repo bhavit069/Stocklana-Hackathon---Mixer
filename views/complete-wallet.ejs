@@ -1,0 +1,77 @@
+<%- include('partials/head') %>
+
+    <div
+        class="w-full max-w-md bg-surface p-8 rounded-2xl shadow-2xl border border-gray-800/50 relative overflow-hidden backdrop-blur-sm">
+        <div class="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-1 bg-primary blur-[20px] opacity-40"></div>
+
+        <div class="mb-6">
+            <h2 class="text-3xl font-bold tracking-tight text-white">Almost there</h2>
+            <p class="text-textSecondary mt-2 text-sm">Wallet verified. Pick a username to finish setting up your
+                account.</p>
+        </div>
+
+        <div class="flex items-center gap-3 bg-input border border-gray-800 rounded-lg px-4 py-3 mb-6">
+            <span class="w-2 h-2 rounded-full bg-green-400 shrink-0"></span>
+            <div class="min-w-0">
+                <p class="text-[10px] uppercase tracking-wider text-textSecondary font-semibold">Connected wallet</p>
+                <p class="text-sm text-white font-mono truncate" title="<%= walletAddress %>">
+                    <%= walletAddress.slice(0, 6) %>…<%= walletAddress.slice(-6) %>
+                </p>
+            </div>
+        </div>
+
+        <% if (error) { %>
+            <div class="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-lg mb-6 text-sm text-center">
+                <%= error %>
+            </div>
+            <% } %>
+
+                <form action="/complete-wallet-signup" method="POST" class="space-y-4">
+                    <div class="group">
+                        <label
+                            class="block text-xs font-medium text-textSecondary mb-1.5 uppercase tracking-wide group-focus-within:text-primary transition-colors">Username</label>
+                        <input type="text" name="username" required autofocus
+                            class="w-full bg-input border border-gray-800 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all placeholder-gray-600"
+                            placeholder="satoshi">
+                    </div>
+
+                    <div class="group">
+                        <label
+                            class="block text-xs font-medium text-textSecondary mb-1.5 uppercase tracking-wide group-focus-within:text-primary transition-colors">Email
+                            Address</label>
+                        <input type="email" name="email" required
+                            class="w-full bg-input border border-gray-800 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all placeholder-gray-600"
+                            placeholder="name@company.com">
+                    </div>
+
+                    <div class="group">
+                        <label
+                            class="block text-xs font-medium text-textSecondary mb-1.5 uppercase tracking-wide group-focus-within:text-primary transition-colors">Password
+                            <span class="normal-case tracking-normal text-textSecondary/60">(optional)</span></label>
+                        <input type="password" name="password"
+                            class="w-full bg-input border border-gray-800 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all placeholder-gray-600"
+                            placeholder="••••••••">
+                        <p class="text-[10px] text-textSecondary mt-1">Set one if you also want to sign in by email. You
+                            can always sign in with your wallet.</p>
+                    </div>
+
+                    <div class="group">
+                        <label
+                            class="block text-xs font-medium text-textSecondary mb-1.5 uppercase tracking-wide group-focus-within:text-primary transition-colors">Referral
+                            Code <span class="normal-case tracking-normal text-textSecondary/60">(optional)</span></label>
+                        <input type="text" name="referralCode"
+                            class="w-full bg-input border border-gray-800 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all placeholder-gray-600">
+                    </div>
+
+                    <button type="submit"
+                        class="w-full bg-primary hover:bg-primary/90 text-white font-medium py-3 rounded-lg transition-transform transform active:scale-[0.98] shadow-lg shadow-primary/20">
+                        Create Account
+                    </button>
+                </form>
+
+                <p class="mt-6 text-center text-xs text-textSecondary">
+                    A Mixer wallet is created for you automatically. Your connected wallet is only used to sign in.
+                </p>
+    </div>
+
+    <%- include('partials/footer') %>

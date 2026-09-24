@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pre-IPO Stocks · Mixer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            background: '#0b0d10', surface: '#15161A', stroke: '#2C2C2C',
+            primary: '#7453E2', textSecondary: '#9AA0A6', textTertiary: '#6b7280'
+          }
+        }
+      }
+    }
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .tnum { font-variant-numeric: tabular-nums; }
+    tbody tr { cursor: pointer; }
+    tbody tr:hover { background: rgba(255,255,255,.02); }
+  </style>
+</head>
+
+<body class="bg-background text-white min-h-screen">
+
+  <%- include('partials/appnav', { user: user, active: 'stocks' }) %>
+
+  <%
+    function fmtUsd(n) {
+      n = Number(n);
+      if (!isFinite(n) || n <= 0) return '—';
+      if (n >= 1000) return '$' + n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+      return '$' + n.toFixed(2);
+    }
+
+    function fmtVal(n) {
+      n = Number(n);
+      if (!isFinite(n) || n <= 0) return '—';
+      if (n >= 1e12) return '$' + (n / 1e12).toFixed(2) + 'T';
+      if (n >= 1e9)  return '$' + (n / 1e9).toFixed(1) + 'B';
+      if (n >= 1e6)  return '$' + (n / 1e6).toFixed(1) + 'M';
+      return '$' + n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    }
+    function fmtNum(n) {
+      n = Number(n);
+      if (!isFinite(n) || n <= 0) return '—';
+      return n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    }
+    function signed(n, d) {
+      if (n == null || !isFinite(n)) return null;
+      d = d == null ? 2 : d;
+      return (n >= 0 ? '+' : '') + Number(n).toFixed(d) + '%';
+    }
+    function shortMint(m) { return m ? m.slice(0, 4) + '…' + m.slice(-4) : '—'; }
+
+    var totalVal = tokens.reduce(function (s, t) { return s + (t.valuation || 0); }, 0);
+  %>
+
+  <div class="max-w-[1200px] mx-auto px-6 py-8">
+
+    <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
+      <div>
+        <div class="flex items-center gap-2.5">
+          <h1 class="text-[26px] font-semibold tracking-tight">Pre-IPO Stocks</h1>
+          <span class="text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded
+                       bg-primary/15 text-primary border border-primary/30">Tokenized equity</span>
+        </div>
+        <p class="text-sm text-textSecondary mt-1.5 max-w-2xl leading-relaxed">
+          Private companies, tokenized on Solana by PreStocks. These are ordinary
+          SPL mints, so any of them can be weighted into a mixer alongside anything else.
+        </p>
+      </div>
+
+      <div class="flex items-center gap-5 shrink-0">
+        <div>
+          <p class="text-[10px] uppercase tracking-wider text-textTertiary font-semibold">Companies</p>
+          <p class="text-xl font-semibold tnum mt-0.5"><%= tokens.length %></p>
+        </div>
+        <div>
+          <p class="text-[10px] uppercase tracking-wider text-textTertiary font-semibold">Combined value</p>
+          <p class="text-xl font-semibold tnum mt-0.5"><%= fmtVal(totalVal) %></p>
+        </div>
+      </div>
+    </div>
+
+    <% if (failed && failed.length) { %>
+      <div class="mb-5 px-4 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs">
+        <%= failed.join(' and ') %> could not be reached, so this list is incomplete.
+      </div>
+    <% } %>
+
+    <div class="flex flex-wrap items-center gap-2 mb-3">
+      <input id="search" type="search" placeholder="Search company or sector"
+             class="ml-auto w-full sm:w-64 px-3 py-1.5 text-xs bg-surface border border-stroke rounded-lg
+                    placeholder-textTertiary focus:outline-none focus:border-primary transition">
+    </div>
+
+    <section class="bg-surface border border-stroke rounded-2xl overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-black/30 text-textSecondary">
+            <tr>
+              <th class="text-left  font-semibold px-5 py-3 text-[10px] uppercase tracking-wider">Company</th>
+              <th class="text-left  font-semibold px-3 py-3 text-[10px] uppercase tracking-wider">Issuer</th>
+              <th class="text-right font-semibold px-3 py-3 text-[10px] uppercase tracking-wider">Price</th>
+              <th class="text-right font-semibold px-3 py-3 text-[10px] uppercase tracking-wider">Valuation</th>
+              <th class="text-right font-semibold px-3 py-3 text-[10px] uppercase tracking-wider" title="Token price against the issuer's mark">Premium</th>
+              <th class="text-right font-semibold px-3 py-3 text-[10px] uppercase tracking-wider">Supply / Holders</th>
+              <th class="text-right font-semibold px-5 py-3 text-[10px] uppercase tracking-wider"></th>
+            </tr>
+          </thead>
+          <tbody id="rows">
+            <% tokens.forEach(function (t) { %>
+              <tr data-provider="<%= t.provider %>"
+                  data-search="<%= (t.symbol + ' ' + t.name + ' ' + (t.sector || '')).toLowerCase() %>"
+                  data-mint="<%= t.mint %>">
+                <td class="px-5 py-3">
+                  <div class="flex items-center gap-2.5 min-w-0">
+                    <% if (t.image) { %>
+                      <img src="<%= t.image %>" alt="" class="w-7 h-7 rounded-lg object-cover bg-black/40 border border-stroke shrink-0">
+                    <% } else { %>
+                      <div class="w-7 h-7 rounded-lg bg-primary/20 border border-primary/30 flex items-center justify-center text-[11px] font-bold text-primary shrink-0">
+                        <%= t.name.charAt(0).toUpperCase() %>
+                      </div>
+                    <% } %>
+                    <div class="min-w-0">
+                      <div class="font-medium truncate"><%= t.name %></div>
+                      <div class="text-[10px] text-textTertiary truncate">
+                        <%= t.symbol %><% if (t.sector) { %> · <%= t.sector %><% } %>
+                      </div>
+                    </div>
+                  </div>
+                </td>
+                <td class="px-3 py-3">
+                  <span class="text-[10px] font-medium px-1.5 py-0.5 rounded border
+                    <%= t.provider === 'prestocks'
+                        ? 'bg-blue-500/10 text-blue-300 border-blue-500/30'
+                        : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' %>">
+                    <%= t.providerLabel %>
+                  </span>
+                </td>
+                <td class="px-3 py-3 text-right tnum font-medium"><%= fmtUsd(t.tokenPrice) %></td>
+                <td class="px-3 py-3 text-right tnum text-textSecondary"><%= fmtVal(t.valuation) %></td>
+                <td class="px-3 py-3 text-right tnum">
+                  <% if (t.premiumPct == null) { %>
+                    <span class="text-textTertiary">—</span>
+                  <% } else { %>
+                    <span class="font-medium" style="color:<%= t.premiumPct >= 0 ? '#22c55e' : '#f6465d' %>">
+                      <%= signed(t.premiumPct) %>
+                    </span>
+                  <% } %>
+                </td>
+                <td class="px-3 py-3 text-right tnum text-[11px] text-textSecondary">
+                  <% if (t.supply) { %><%= fmtNum(t.supply) %> tokens<% } %>
+                  <% if (t.holders) { %><%= fmtNum(t.holders) %> holders<% } %>
+                  <% if (!t.supply && !t.holders) { %>—<% } %>
+                </td>
+                <td class="px-5 py-3 text-right whitespace-nowrap">
+                  <button onclick="toggleDiscover(event, '<%= t.mint %>', '<%= t.symbol %>')"
+                          data-discover="<%= t.mint %>"
+                          class="px-2.5 py-1 text-[11px] font-semibold rounded-md bg-primary/15 text-primary
+                                 border border-primary/30 hover:bg-primary hover:text-white transition">
+                    Discover
+                  </button>
+                  <% if (t.url) { %>
+                    <a href="<%= t.url %>" target="_blank" rel="noopener"
+                       onclick="event.stopPropagation()"
+                       class="ml-1 inline-block px-2 py-1 text-[11px] rounded-md border border-stroke
+                              text-textSecondary hover:text-white hover:border-primary transition">↗</a>
+                  <% } %>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+      <p id="empty" class="hidden px-5 py-10 text-center text-sm text-textSecondary">No companies match that search.</p>
+    </section>
+
+    <p class="mt-4 text-[11px] text-textTertiary leading-relaxed max-w-3xl">
+      Prices and valuations are supplied by PreStocks and refreshed every few minutes.
+      Tokens are backed by PreStocks&rsquo; own SPV structure &mdash; holding one is exposure to that
+      instrument, not direct equity in the company.
+    </p>
+  </div>
+
+<script>
+
+  function toggleDiscover(e, mint, symbol) {
+    e.stopPropagation();
+
+    var row = document.querySelector('tr[data-mint="' + mint + '"]');
+    if (!row) return;
+
+    var existing = row.nextElementSibling;
+    if (existing && existing.classList.contains('discover-row')) {
+      existing.remove();
+      return;
+    }
+
+    document.querySelectorAll('.discover-row').forEach(function (r) { r.remove(); });
+
+    var panel = document.createElement('tr');
+    panel.className = 'discover-row';
+    panel.innerHTML =
+      '<td colspan="7" class="px-5 py-4 bg-black/30 border-t border-stroke">' +
+      '<p class="text-xs text-textSecondary">Looking for mixers holding ' + esc(symbol) + '…</p></td>';
+    row.insertAdjacentElement('afterend', panel);
+
+    fetch('/api/pre-ipo/' + encodeURIComponent(mint) + '/mixers', {
+      headers: { Accept: 'application/json' }
+    })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!panel.isConnected) return;
+        panel.querySelector('td').innerHTML = renderDiscover(d, mint, symbol);
+      })
+      .catch(function () {
+        if (!panel.isConnected) return;
+        panel.querySelector('td').innerHTML =
+          '<p class="text-xs text-red-400">Could not load mixers for ' + esc(symbol) + '.</p>';
+      });
+  }
+
+  function esc(v) {
+    return String(v == null ? '' : v)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function fmtSolD(n) {
+    n = Number(n) || 0;
+    if (n === 0) return '0';
+    if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
+    if (n >= 1) return n.toFixed(2);
+    return n.toFixed(4);
+  }
+
+  function renderDiscover(d, mint, symbol) {
+    var build = '<a href="/mixer/create?add=' + encodeURIComponent(mint) + '" ' +
+      'class="inline-block mt-3 text-[11px] font-semibold px-3 py-1.5 rounded-md bg-primary/15 ' +
+      'text-primary border border-primary/30 hover:bg-primary hover:text-white transition">' +
+      'Build a mixer with ' + esc(symbol) + ' \u2192</a>';
+
+    if (!d || !d.mixers || !d.mixers.length) {
+      return '<p class="text-xs text-textSecondary">No mixer holds ' + esc(symbol) + ' yet. ' +
+             'You could be the first.</p>' + build;
+    }
+
+    var cards = d.mixers.map(function (m) {
+      var chg = (m.change24h === null || m.change24h === undefined)
+        ? '<span class="text-textTertiary">\u2014</span>'
+        : '<span style="color:' + (m.change24h >= 0 ? '#22c55e' : '#f6465d') + '">' +
+          (m.change24h >= 0 ? '+' : '') + Number(m.change24h).toFixed(2) + '%</span>';
+
+      return '<a href="/mixer/' + esc(m.mixer_id) + '" ' +
+        'class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-surface border border-stroke ' +
+        'hover:border-primary/50 transition">' +
+          '<div class="min-w-0 flex-1">' +
+            '<div class="flex items-center gap-2">' +
+              '<span class="text-[13px] font-medium truncate">' + esc(m.name) + '</span>' +
+              '<span class="text-[10px] px-1.5 py-0.5 rounded bg-white/5 border border-stroke text-textSecondary">' +
+                esc(m.ticker) + '</span>' +
+            '</div>' +
+            (m.thesis_title
+              ? '<div class="text-[11px] text-textTertiary truncate mt-0.5">\u201c' + esc(m.thesis_title) + '\u201d</div>'
+              : '') +
+          '</div>' +
+          '<div class="text-right shrink-0">' +
+            '<div class="text-[13px] font-semibold tnum">' + (m.weight * 100).toFixed(1) + '%</div>' +
+            '<div class="text-[10px] text-textTertiary">of basket</div>' +
+          '</div>' +
+          '<div class="text-right shrink-0 w-20">' +
+            '<div class="text-[12px] tnum">' + fmtSolD(m.netSol) + ' SOL</div>' +
+            '<div class="text-[10px] tnum">' + chg + '</div>' +
+          '</div>' +
+        '</a>';
+    }).join('');
+
+    return '<p class="text-[11px] uppercase tracking-wider text-textTertiary font-semibold mb-2">' +
+           d.count + ' mixer' + (d.count === 1 ? '' : 's') + ' hold ' + esc(symbol) + '</p>' +
+           '<div class="space-y-2">' + cards + '</div>' + build;
+  }
+
+  document.querySelectorAll('#rows tr').forEach(function (tr) {
+    tr.addEventListener('click', function () {
+      var link = tr.querySelector('a[target="_blank"]');
+      if (link) window.open(link.href, '_blank', 'noopener');
+    });
+  });
+
+  document.getElementById('search').addEventListener('input', applyFilters);
+
+  function applyFilters() {
+    var q = document.getElementById('search').value.trim().toLowerCase();
+    var shown = 0;
+    document.querySelectorAll('#rows tr').forEach(function (tr) {
+
+      if (tr.classList.contains('discover-row')) { tr.remove(); return; }
+      var show = !q || (tr.dataset.search || '').indexOf(q) !== -1;
+      tr.hidden = !show;
+      if (show) shown++;
+    });
+    document.getElementById('empty').classList.toggle('hidden', shown > 0);
+  }
+</script>
+
+</body>
+</html>

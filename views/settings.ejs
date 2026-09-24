@@ -1,0 +1,190 @@
+<%
+  var linkHref = '/link/x' + (next ? '?next=' + encodeURIComponent(next) : '');
+  var since = user.createdAt ? new Date(user.createdAt) : null;
+  var sinceText = since && isFinite(since.getTime())
+    ? since.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : null;
+%>
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings · Mixer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            background: '#0b0d10', surface: '#111317', stroke: 'rgba(255,255,255,0.07)',
+            primary: '#7453E2', textSecondary: '#9AA0A6', muted: '#6b7280'
+          }
+        }
+      }
+    }
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .card {
+      background: #111317;
+      border: 1px solid rgba(255, 255, 255, .07);
+      border-radius: 16px;
+      box-shadow: 0 1px 0 rgba(255, 255, 255, .04) inset;
+    }
+    .row + .row { border-top: 1px solid rgba(255, 255, 255, .06); }
+  </style>
+</head>
+
+<body class="bg-background text-white min-h-screen">
+
+  <%- include('partials/appnav', { user: user, active: 'settings' }) %>
+
+  <div class="max-w-[880px] mx-auto px-6 py-8">
+
+    <header class="mb-6">
+      <h1 class="text-[26px] font-semibold tracking-tight">Settings</h1>
+      <p class="text-sm text-textSecondary mt-1">Your profile and the accounts connected to it.</p>
+    </header>
+
+    <% if (needsX && !user.xUsername) { %>
+      <div class="rounded-2xl border border-primary/35 bg-primary/10 px-5 py-4 mb-5 flex items-start gap-4" role="status">
+        <span class="w-9 h-9 rounded-xl bg-black/40 border border-white/10 flex items-center justify-center shrink-0">
+          <svg class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231z"/>
+          </svg>
+        </span>
+        <div class="min-w-0 flex-1">
+          <p class="text-[14px] font-semibold">Link X to create a mixer</p>
+          <p class="text-[13px] text-textSecondary mt-1 leading-relaxed">
+            Every basket is published under its creator's name, so investors can see whose thesis they're buying.
+            It takes a few seconds, and you'll come straight back<%= next ? ' to where you were' : '' %>.
+          </p>
+        </div>
+        <a href="<%= linkHref %>" class="shrink-0 self-center inline-flex items-center h-9 px-4 rounded-lg bg-white hover:bg-gray-100 text-black text-[13px] font-semibold transition-colors">Link X</a>
+      </div>
+    <% } %>
+
+    <% if (xLinked && user.xUsername) { %>
+      <div class="rounded-xl border border-green-500/25 bg-green-500/10 px-4 py-3 mb-5 text-sm text-green-300" role="status">
+        X account linked as <span class="font-semibold">@<%= user.xUsername %></span>.
+      </div>
+    <% } %>
+    <% if (xUnlinked) { %>
+      <div class="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 mb-5 text-sm text-textSecondary" role="status">
+        X account unlinked.
+      </div>
+    <% } %>
+    <% if (xError && !needsX) { %>
+      <div class="rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 mb-5 text-sm text-red-300" role="alert">
+        <%= xError %>
+      </div>
+    <% } %>
+
+    <section class="card p-6 mb-5">
+      <div class="flex items-center gap-4">
+        <% if (user.xProfilePicture) { %>
+          <img src="<%= user.xProfilePicture %>" alt="" class="w-14 h-14 rounded-full object-cover border border-white/10">
+        <% } else { %>
+          <div class="w-14 h-14 rounded-full bg-primary/15 border border-primary/30 flex items-center justify-center text-xl font-semibold text-[#b9a4ff]">
+            <%= (user.username || '?').charAt(0).toUpperCase() %>
+          </div>
+        <% } %>
+        <div class="min-w-0">
+          <p class="text-[17px] font-semibold truncate"><%= user.username %></p>
+          <p class="text-[13px] text-textSecondary truncate">
+            <%= user.email || 'No email on file' %><% if (sinceText) { %><span class="text-muted"> · member since <%= sinceText %></span><% } %>
+          </p>
+        </div>
+        <a href="/creator/<%= user.userId %>" class="ml-auto shrink-0 inline-flex items-center h-9 px-4 rounded-lg text-[13px] font-semibold bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] transition-colors">
+          View profile
+        </a>
+      </div>
+    </section>
+
+    <section class="card mb-5">
+      <div class="px-6 pt-5 pb-2">
+        <h2 class="text-[15px] font-semibold">Connected accounts</h2>
+        <p class="text-[13px] text-textSecondary mt-1">How you sign in, and who you appear as on your mixers.</p>
+      </div>
+
+      <div class="px-6">
+
+        <div class="row flex items-center gap-4 py-4" id="x-account">
+          <span class="w-10 h-10 rounded-xl bg-black border border-white/10 flex items-center justify-center shrink-0">
+            <svg class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231z"/>
+            </svg>
+          </span>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2">
+              <p class="text-[14px] font-medium">X account</p>
+              <% if (user.xUsername) { %>
+                <span class="inline-flex items-center gap-1 text-[11px] font-medium text-green-400"><span class="w-1.5 h-1.5 rounded-full bg-green-400"></span>Linked</span>
+              <% } else { %>
+                <span class="text-[11px] font-medium text-[#eab308]">Not linked</span>
+              <% } %>
+            </div>
+            <p class="text-[12.5px] text-textSecondary mt-0.5 truncate">
+              <% if (user.xUsername) { %>
+                <a href="https://x.com/<%= user.xUsername %>" target="_blank" rel="noopener noreferrer" class="text-[#a78bfa] hover:text-white">@<%= user.xUsername %></a>
+                · shown as the creator on your mixers
+              <% } else { %>
+                Required to create mixers, and shows people who's behind your baskets.
+              <% } %>
+            </p>
+          </div>
+          <% if (user.xUsername) { %>
+
+            <form action="/link/x/disconnect" method="POST" class="shrink-0">
+              <button type="submit"
+                      class="h-9 px-4 rounded-lg text-[13px] font-semibold text-textSecondary border border-white/[0.08] hover:border-red-500/50 hover:text-red-400 transition-colors">
+                Unlink
+              </button>
+            </form>
+          <% } else { %>
+            <a href="<%= linkHref %>" class="shrink-0 inline-flex items-center h-9 px-4 rounded-lg bg-white hover:bg-gray-100 text-black text-[13px] font-semibold transition-colors">
+              Link X
+            </a>
+          <% } %>
+        </div>
+
+        <div class="row flex items-center gap-4 py-4">
+          <span class="w-10 h-10 rounded-xl bg-primary/15 border border-primary/30 flex items-center justify-center shrink-0">
+            <svg class="w-4 h-4 text-[#b9a4ff]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/>
+            </svg>
+          </span>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2">
+              <p class="text-[14px] font-medium">Sign-in wallet</p>
+              <% if (user.authWalletAddress) { %>
+                <span class="inline-flex items-center gap-1 text-[11px] font-medium text-green-400"><span class="w-1.5 h-1.5 rounded-full bg-green-400"></span>Connected</span>
+              <% } %>
+            </div>
+            <p class="text-[12.5px] text-textSecondary mt-0.5 truncate">
+              <% if (user.authWalletAddress) { %>
+                <span class="font-mono" title="<%= user.authWalletAddress %>"><%= user.authWalletAddress.slice(0, 6) %>…<%= user.authWalletAddress.slice(-6) %></span>
+                · used to sign in to Mixer
+              <% } else { %>
+                None — you sign in with email and password.
+              <% } %>
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card px-6 py-5 flex items-center gap-4">
+      <div class="min-w-0 flex-1">
+        <p class="text-[14px] font-medium">Wallet &amp; security</p>
+        <p class="text-[12.5px] text-textSecondary mt-0.5">Your balance, sending SOL and exporting your private key live on the Wallet page.</p>
+      </div>
+      <a href="/wallet" class="shrink-0 text-[13px] font-medium text-[#a78bfa] hover:text-white transition-colors">Open wallet →</a>
+    </section>
+  </div>
+
+</body>
+
+</html>

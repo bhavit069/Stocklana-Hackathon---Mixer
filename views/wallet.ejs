@@ -1,0 +1,405 @@
+<%
+
+  function fmtSol(v) {
+    var n = Number(v);
+    if (!isFinite(n)) return '—';
+    if (n >= 1000) return n.toLocaleString('en-US', { maximumFractionDigits: 2 });
+    return n.toFixed(4);
+  }
+%>
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wallet</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            background: '#0b0d10', surface: '#15161A', stroke: '#2C2C2C',
+            primary: '#7453E2', textSecondary: '#9AA0A6'
+          }
+        }
+      }
+    }
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    /* Every figure aligns down a column -- UI_STANDARDS #3. */
+    .tnum { font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+
+<body class="bg-background text-white min-h-screen">
+
+  <%- include('partials/appnav', { user: user, active: 'wallet' }) %>
+
+  <div class="max-w-[1200px] mx-auto px-6 py-8">
+
+    <header class="mb-8">
+      <h1 class="text-[26px] font-semibold tracking-tight">Wallet</h1>
+      <p class="text-textSecondary text-sm mt-1">Your balance, your key, and how you sign in.</p>
+    </header>
+
+    <% if (typeof txId !== 'undefined' && txId) { %>
+      <div class="bg-green-500/10 border border-green-500/20 px-4 py-3 rounded-xl mb-4 text-sm">
+        <p class="text-green-400 font-medium mb-0.5">Transaction sent</p>
+        <a href="https://explorer.solana.com/tx/<%= txId %>?cluster=devnet" target="_blank" rel="noopener"
+           class="text-primary hover:underline font-mono text-xs break-all"><%= txId %></a>
+      </div>
+    <% } %>
+    <% if (typeof error !== 'undefined' && error) { %>
+      <div class="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-xl mb-4 text-sm">
+        <%= error %>
+      </div>
+    <% } %>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+
+      <div class="lg:col-span-2 bg-surface border border-stroke rounded-2xl p-6">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <p class="text-[10px] uppercase tracking-wider text-textSecondary font-semibold mb-2">Balance</p>
+            <div class="flex items-baseline gap-2">
+              <span class="text-4xl font-bold tnum"><%= fmtSol(balance) %></span>
+              <span class="text-lg text-textSecondary font-medium">SOL</span>
+            </div>
+            <p class="text-sm text-textSecondary tnum mt-1">
+              <% if (typeof solUsd !== 'undefined' && solUsd) { %>
+                ≈ $<%= (balance * solUsd).toFixed(2) %>
+              <% } else { %>
+                &mdash;
+              <% } %>
+            </p>
+          </div>
+          <span class="text-[10px] font-semibold uppercase tracking-wider text-primary border border-primary/30 bg-primary/10 px-2 py-1 rounded shrink-0">
+            Devnet
+          </span>
+        </div>
+
+        <div class="mt-5 pt-4 border-t border-stroke flex items-center justify-between gap-3">
+          <div class="min-w-0">
+            <p class="text-[10px] uppercase tracking-wider text-textSecondary font-semibold mb-1">Address</p>
+            <p class="font-mono text-sm text-gray-300 truncate" title="<%= user.walletAddress %>">
+              <%= user.walletAddress || '—' %>
+            </p>
+          </div>
+          <% if (user.walletAddress) { %>
+            <button onclick="copyAddr(this)"
+                    class="shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg border border-stroke text-textSecondary hover:text-white hover:border-primary/60 transition-colors">
+              Copy
+            </button>
+          <% } %>
+        </div>
+      </div>
+
+      <div class="bg-surface border border-stroke rounded-2xl p-6 flex flex-col">
+        <p class="text-[10px] uppercase tracking-wider text-textSecondary font-semibold mb-4">Actions</p>
+        <div class="space-y-2.5">
+          <button onclick="document.getElementById('sendModal').classList.remove('hidden')"
+                  class="w-full bg-white/5 hover:bg-white/10 border border-stroke hover:border-primary/50 text-white text-sm font-medium py-2.5 rounded-xl transition-colors">
+            Send SOL
+          </button>
+          <button onclick="topUp(this)" id="topUpBtn"
+                  class="w-full bg-white/5 hover:bg-white/10 border border-stroke hover:border-primary/50 text-white text-sm font-medium py-2.5 rounded-xl transition-colors">
+            Add devnet SOL
+          </button>
+          <p id="topUpMsg" class="text-xs text-textSecondary min-h-[1rem]" role="status" aria-live="polite"></p>
+        </div>
+      </div>
+    </div>
+
+    <section class="bg-surface border border-primary/25 rounded-2xl p-6 mb-4">
+      <div class="flex flex-col lg:flex-row lg:items-center gap-6">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2.5 mb-2.5">
+            <svg class="w-4 h-4 text-primary shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+            </svg>
+            <h2 class="text-lg font-semibold">Your private key</h2>
+          </div>
+
+          <p class="text-sm text-textSecondary leading-relaxed max-w-2xl">
+            Your mixers are owned by this wallet &mdash; not by this website. Exporting the key lets you open
+            it in Phantom or Solflare and redeem your positions directly on-chain,
+            <span class="text-gray-300">even if this site is down</span>.
+          </p>
+          <p class="text-sm text-textSecondary leading-relaxed max-w-2xl mt-2">
+            Export it once and store it somewhere only you can reach. Anyone who has it controls the wallet.
+          </p>
+        </div>
+
+        <div class="lg:w-60 shrink-0">
+          <% if (typeof exportReady !== 'undefined' && !exportReady) { %>
+
+            <div class="rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-4">
+              <p class="text-[10px] font-bold text-yellow-400 uppercase tracking-wider mb-1.5">Not available yet</p>
+              <p class="text-xs text-yellow-200/70 leading-relaxed">
+                Key export isn't switched on for this deployment yet.
+              </p>
+            </div>
+          <% } else if (typeof hasPassword !== 'undefined' && !hasPassword) { %>
+            <div class="rounded-xl border border-stroke bg-black/20 p-4">
+              <p class="text-[10px] font-bold text-textSecondary uppercase tracking-wider mb-1.5">Password needed</p>
+              <p class="text-xs text-textSecondary leading-relaxed">
+                Set an account password first &mdash; export asks for it, so a stolen session alone can't take your key.
+              </p>
+            </div>
+          <% } else { %>
+            <button onclick="openExportModal()"
+                    class="w-full bg-primary hover:bg-[#6344d1] text-white text-sm font-semibold py-3 rounded-xl transition-colors">
+              Export private key
+            </button>
+            <p class="text-[11px] text-textSecondary text-center mt-2">Asks for your password</p>
+          <% } %>
+        </div>
+      </div>
+    </section>
+
+    <section class="bg-surface border border-stroke rounded-2xl px-6 py-5 flex items-center gap-4">
+      <div class="min-w-0 flex-1">
+        <p class="text-sm font-medium">Connected accounts</p>
+        <p class="text-xs text-textSecondary mt-0.5">Your sign-in wallet and X account are managed in Settings.</p>
+      </div>
+      <a href="/settings" class="shrink-0 text-[13px] font-medium text-[#a78bfa] hover:text-white transition-colors">Open settings →</a>
+    </section>
+
+  </div>
+
+  <script>
+    function copyAddr(btn) {
+      navigator.clipboard.writeText('<%= user.walletAddress %>').then(function () {
+        var t = btn.textContent;
+        btn.textContent = 'Copied';
+        setTimeout(function () { btn.textContent = t; }, 1600);
+      });
+    }
+
+    function topUp(btn) {
+      var msg = document.getElementById('topUpMsg');
+      btn.disabled = true;
+      btn.textContent = 'Sending…';
+      msg.textContent = '';
+      msg.style.color = '';
+
+      fetch('/wallet/devnet-topup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sol: 1 })
+      })
+        .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, b: b }; }); })
+        .then(function (res) {
+          if (!res.ok) throw new Error(res.b.error || 'Top-up failed');
+          msg.textContent = 'Added ' + res.b.added + ' SOL. Reloading…';
+          msg.style.color = '#22c55e';
+          setTimeout(function () { window.location.reload(); }, 1200);
+        })
+        .catch(function (e) {
+          msg.textContent = e.message;
+          msg.style.color = '#f6465d';
+          btn.disabled = false;
+          btn.textContent = 'Add devnet SOL';
+        });
+    }
+  </script>
+
+  <div id="sendModal"
+      class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div class="bg-surface border border-stroke rounded-2xl w-full max-w-md p-6 relative shadow-2xl">
+          <h3 class="text-xl font-bold text-white mb-4">Send SOL</h3>
+
+          <form action="/wallet/send" method="POST" class="space-y-4">
+              <div class="group">
+                  <label
+                      class="block text-xs font-medium text-textSecondary mb-1.5 uppercase tracking-wide">Destination
+                      Address</label>
+                  <input type="text" name="destination" required
+                      class="w-full bg-black/30 border border-stroke rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all font-mono text-sm"
+                      placeholder="Solana Address">
+              </div>
+
+              <div class="group">
+                  <label
+                      class="block text-xs font-medium text-textSecondary mb-1.5 uppercase tracking-wide">Amount
+                      (SOL)</label>
+                  <input type="number" step="0.000000001" name="amount" required
+                      class="w-full bg-black/30 border border-stroke rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all"
+                      placeholder="0.00">
+              </div>
+
+              <div class="flex gap-3 pt-2">
+                  <button type="button" onclick="document.getElementById('sendModal').classList.add('hidden')"
+                      class="flex-1 bg-surface border border-stroke hover:bg-white/10 text-white py-3 rounded-lg transition-all">
+                      Cancel
+                  </button>
+                  <button type="submit"
+                      class="flex-1 bg-primary hover:bg-primary/90 text-white font-medium py-3 rounded-lg transition-transform transform active:scale-[0.98]">
+                      Confirm Send
+                  </button>
+              </div>
+          </form>
+      </div>
+  </div>
+
+  <div id="exportModal"
+      class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div class="bg-surface border border-stroke rounded-2xl w-full max-w-md p-6 relative shadow-2xl">
+
+          <div class="flex items-center gap-3 mb-4">
+              <div class="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center shrink-0">
+                  <svg class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                  </svg>
+              </div>
+              <h3 class="text-xl font-bold text-white">Export Private Key</h3>
+          </div>
+
+          <div id="exportStep1">
+              <div class="bg-red-500/5 border border-red-500/20 rounded-lg p-4 mb-5 space-y-2">
+                  <p class="text-sm text-red-300 font-medium">Anyone with this key controls your wallet.</p>
+                  <ul class="text-xs text-textSecondary space-y-1.5 list-disc list-inside">
+                      <li>Never share it or type it into a website.</li>
+                      <li>Mixer support will never ask you for it.</li>
+                      <li>Store it somewhere only you can reach.</li>
+                  </ul>
+              </div>
+
+              <label class="block text-xs font-medium text-textSecondary mb-1.5 uppercase tracking-wide">
+                  Confirm your password
+              </label>
+              <input type="password" id="exportPassword" autocomplete="current-password"
+                  class="w-full bg-black/30 border border-stroke rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all"
+                  placeholder="Account password">
+
+              <p id="exportError" class="text-red-400 text-sm mt-2 hidden"></p>
+
+              <div class="flex gap-3 pt-5">
+                  <button type="button" onclick="closeExportModal()"
+                      class="flex-1 bg-surface border border-stroke hover:bg-white/10 text-white py-3 rounded-lg transition-all">
+                      Cancel
+                  </button>
+                  <button type="button" id="exportConfirmBtn" onclick="doExport()"
+                      class="flex-1 bg-red-500/90 hover:bg-red-500 text-white font-medium py-3 rounded-lg transition-transform transform active:scale-[0.98]">
+                      Reveal Key
+                  </button>
+              </div>
+          </div>
+
+          <div id="exportStep2" class="hidden">
+              <p class="text-sm text-textSecondary mb-3">
+                  Your private key, in base58 &mdash; paste this into Phantom or Solflare to import the wallet.
+              </p>
+
+              <div class="bg-black/40 border border-stroke rounded-lg p-4 mb-3">
+                  <p id="exportKeyText"
+                      class="font-mono text-sm text-white break-all select-all leading-relaxed blur-sm transition-all duration-200"></p>
+              </div>
+
+              <div class="flex items-center justify-between mb-5">
+                  <button type="button" onclick="toggleKeyBlur()" id="exportBlurBtn"
+                      class="text-xs text-textSecondary hover:text-white transition-colors">
+                      Click to reveal
+                  </button>
+                  <button type="button" onclick="copyExportedKey()" id="exportCopyBtn"
+                      class="text-xs text-primary hover:text-white transition-colors font-medium">
+                      Copy to clipboard
+                  </button>
+              </div>
+
+              <button type="button" onclick="closeExportModal()"
+                  class="w-full bg-primary hover:bg-primary/90 text-white font-medium py-3 rounded-lg transition-all">
+                  Done
+              </button>
+          </div>
+      </div>
+  </div>
+
+  <script>
+
+      (function () {
+          var exportedKey = null;
+
+          window.openExportModal = function () {
+              document.getElementById('exportStep1').classList.remove('hidden');
+              document.getElementById('exportStep2').classList.add('hidden');
+              document.getElementById('exportPassword').value = '';
+              document.getElementById('exportError').classList.add('hidden');
+              document.getElementById('exportModal').classList.remove('hidden');
+              document.getElementById('exportPassword').focus();
+          };
+
+          window.closeExportModal = function () {
+              exportedKey = null;
+              document.getElementById('exportKeyText').textContent = '';
+              document.getElementById('exportPassword').value = '';
+              document.getElementById('exportModal').classList.add('hidden');
+          };
+
+          window.doExport = function () {
+              var btn = document.getElementById('exportConfirmBtn');
+              var err = document.getElementById('exportError');
+              var pw = document.getElementById('exportPassword').value;
+
+              err.classList.add('hidden');
+              btn.disabled = true;
+              btn.textContent = 'Verifying…';
+
+              fetch('/wallet/export-key', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ password: pw })
+              })
+                  .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, b: b }; }); })
+                  .then(function (res) {
+                      if (!res.ok) {
+                          var failure = new Error(res.b.error || 'Export failed');
+                          failure.code = res.b.code;
+                          throw failure;
+                      }
+                      exportedKey = res.b.privateKey;
+                      document.getElementById('exportKeyText').textContent = exportedKey;
+                      document.getElementById('exportStep1').classList.add('hidden');
+                      document.getElementById('exportStep2').classList.remove('hidden');
+                  })
+                  .catch(function (e) {
+
+                      err.textContent = e.message;
+                      err.className = e.code === 'NO_WALLET_OWNER'
+                          ? 'text-yellow-400/90 text-xs mt-2 leading-relaxed'
+                          : 'text-red-400 text-sm mt-2';
+                      err.classList.remove('hidden');
+                  })
+                  .finally(function () {
+                      btn.disabled = false;
+                      btn.textContent = 'Reveal Key';
+                  });
+          };
+
+          window.toggleKeyBlur = function () {
+              var el = document.getElementById('exportKeyText');
+              var btn = document.getElementById('exportBlurBtn');
+              var hidden = el.classList.toggle('blur-sm');
+              btn.textContent = hidden ? 'Click to reveal' : 'Hide';
+          };
+
+          window.copyExportedKey = function () {
+              if (!exportedKey) return;
+              var btn = document.getElementById('exportCopyBtn');
+              navigator.clipboard.writeText(exportedKey).then(function () {
+                  btn.textContent = 'Copied';
+                  setTimeout(function () { btn.textContent = 'Copy to clipboard'; }, 1800);
+              });
+          };
+      })();
+  </script>
+
+</body>
+
+</html>

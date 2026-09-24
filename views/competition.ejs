@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= root.name %> · Competition</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { colors: {
+        primary: '#7453E2',
+        primaryStroke: '#21262d',
+        textSecondary: '#9aa0a6',
+        textTertiary: '#5a616b',
+      } } }
+    };
+  </script>
+  <style>
+    .hide-scrollbar::-webkit-scrollbar { display: none; }
+    .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    /* Leaderboard.
+       A real table, not CSS grid. The grid version put `text-right` on grid
+       ITEMS -- which aligns text inside a span only as wide as its content,
+       so every number sat left in its track instead of at the column edge.
+       A <td> is the full column width, so alignment works, and the browser
+       sizes columns from real content rather than hand-guessed minmax(). */
+    .lb-table {
+      width: 100%;
+      border-collapse: collapse;
+      /* auto, not fixed: the basket column should take the slack and the
+         numeric columns should be exactly as wide as their contents. */
+      table-layout: auto;
+    }
+
+    .lb-table th {
+      padding: 8px 14px;
+      font-size: 9.5px;
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: #5a616b;
+      background: #0d1014;
+      border-bottom: 1px solid #21262d;
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    .lb-table td {
+      padding: 11px 14px;
+      border-top: 1px solid #191d23;
+      vertical-align: middle;
+    }
+
+    /* Numeric columns sit right and never wrap -- a wrapped figure reads as
+       two numbers. */
+    .lb-table th.lb-num,
+    .lb-table td.lb-num {
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    /* The rank chip is fixed width, so its column should not grow. */
+    .lb-table th.lb-c-rank,
+    .lb-table td.lb-c-rank { width: 1%; white-space: nowrap; }
+
+    .lb-row { cursor: pointer; transition: background .12s ease; }
+    .lb-row:hover { background: #12161c; }
+
+    /* Rank. Only the top three get a medal colour -- if every position is
+       decorated, the podium stops meaning anything. */
+    .lb-rank {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px; height: 26px;
+      border-radius: 6px;
+      font-size: 12px; font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      color: #7d8590;
+      background: rgba(255,255,255,.04);
+      border: 1px solid #23272f;
+    }
+    .lb-rank.r1 { color: #facc15; background: rgba(250,204,21,.12); border-color: rgba(250,204,21,.4); }
+    .lb-rank.r2 { color: #cbd5e1; background: rgba(203,213,225,.1); border-color: rgba(203,213,225,.32); }
+    .lb-rank.r3 { color: #d8a06a; background: rgba(216,160,106,.12); border-color: rgba(216,160,106,.36); }
+
+    .lb-tag {
+      flex-shrink: 0;
+      font-size: 8.5px; font-weight: 700; letter-spacing: .05em;
+      padding: 1px 4px; border-radius: 3px;
+      color: #7d8590; background: rgba(255,255,255,.05);
+    }
+    .lb-tag.og { color: #a78bfa; background: rgba(167,139,250,.12); }
+
+    .num { font-variant-numeric: tabular-nums; }
+
+    @media (max-width: 760px) {
+      /* Drop the two least-important columns rather than letting seven crush
+         into a phone width. The table itself still scrolls horizontally if
+         even the remaining five do not fit. */
+      .lb-col-opt { display: none; }
+      .lb-table th, .lb-table td { padding-left: 10px; padding-right: 10px; }
+    }
+  </style>
+</head>
+<body class="bg-[#0b0d10] text-gray-200">
+
+  <%- include('partials/appnav', { user: user, active: '' }) %>
+
+  <div class="max-w-[1100px] mx-auto px-4 py-6">
+
+    <div class="flex items-start gap-4 mb-5">
+      <img src="<%= (root.image && root.image.trim()) ? root.image : '/images/tokens/' + (rows[0] && rows[0].topTokens[0] ? rows[0].topTokens[0].address : 'none') %>"
+           alt="" class="w-14 h-14 rounded-xl object-cover border border-[#21262d] bg-[#0b0d10] shrink-0">
+      <div class="min-w-0 flex-1">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="text-[10px] uppercase tracking-wider font-bold" style="color:#a78bfa">Competition</span>
+          <span class="text-[10px] text-[#3d434b]">·</span>
+          <span class="text-[10px] text-textTertiary"><%= rows.length %> baskets</span>
+        </div>
+        <h1 class="text-xl font-bold text-white mt-0.5 leading-tight">
+          <%= root.thesis_title || root.name %>
+        </h1>
+        <p class="text-[12px] text-textSecondary mt-1 leading-relaxed">
+          Every basket here forked
+          <a href="/mixer/<%= root.mixer_id %>" class="text-[#a78bfa] hover:underline"><%= root.name %></a>
+          and argued the weights should be different. Each runs its own vault and its own
+          investors &mdash; ranked below by return since each one launched.
+        </p>
+      </div>
+
+      <a href="/mixer/<%= root.mixer_id %>/remix"
+         class="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold
+                bg-[#7453E2]/12 border border-[#7453E2]/40 text-[#a78bfa]
+                hover:bg-[#7453E2] hover:text-white transition-colors">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/>
+          <path d="M18 9a9 9 0 0 1-9 9"/>
+        </svg>
+        Enter
+      </a>
+    </div>
+
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-5">
+      <div class="rounded-lg border border-[#21262d] bg-[#0f1216] px-3 py-2.5">
+        <p class="text-[9.5px] uppercase tracking-wider text-textTertiary font-bold">Leader</p>
+        <p class="text-[13px] font-semibold text-white truncate mt-0.5">
+          <%= leader ? leader.name : '—' %>
+        </p>
+      </div>
+      <div class="rounded-lg border border-[#21262d] bg-[#0f1216] px-3 py-2.5">
+        <p class="text-[9.5px] uppercase tracking-wider text-textTertiary font-bold">Best return</p>
+        <p class="text-[13px] font-semibold num mt-0.5"
+           style="color:<%= leader && leader.sir >= 0 ? '#22c55e' : (leader ? '#f6465d' : '#5a616b') %>">
+          <%= leader ? ((leader.sir >= 0 ? '+' : '') + Number(leader.sir).toFixed(2) + '%') : '—' %>
+        </p>
+      </div>
+      <div class="rounded-lg border border-[#21262d] bg-[#0f1216] px-3 py-2.5">
+        <p class="text-[9.5px] uppercase tracking-wider text-textTertiary font-bold">Net invested</p>
+        <p class="text-[13px] font-semibold text-white num mt-0.5">
+          <%= Number(totals.netSol).toFixed(2) %> <span class="text-[10px] text-textTertiary font-normal">SOL</span>
+        </p>
+      </div>
+      <div class="rounded-lg border border-[#21262d] bg-[#0f1216] px-3 py-2.5">
+        <p class="text-[9.5px] uppercase tracking-wider text-textTertiary font-bold">Investors</p>
+        <p class="text-[13px] font-semibold text-white num mt-0.5"><%= totals.investors %></p>
+      </div>
+    </div>
+
+    <div class="rounded-xl border border-[#21262d] bg-[#101317] overflow-x-auto hide-scrollbar">
+      <table class="lb-table">
+        <thead>
+          <tr>
+            <th class="lb-c-rank">#</th>
+            <th>Basket</th>
+            <th class="lb-num">SIR</th>
+            <th class="lb-num lb-col-opt">24h</th>
+            <th class="lb-num lb-col-opt">Net in</th>
+            <th class="lb-num">Holders</th>
+            <th class="lb-num">Price</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% rows.forEach(function (r) { %>
+            <tr class="lb-row" data-href="/mixer/<%= r.mixer_id %>">
+
+              <td class="lb-c-rank">
+                <span class="lb-rank <%= r.rank <= 3 ? 'r' + r.rank : '' %>"><%= r.rank %></span>
+              </td>
+
+              <td>
+                <div class="flex items-center gap-2.5 min-w-0">
+                  <img src="<%= (r.image && r.image.trim()) ? r.image : '/images/tokens/' + (r.topTokens[0] ? r.topTokens[0].address : 'none') %>"
+                       alt="" class="w-8 h-8 rounded-lg object-cover border border-[#21262d] bg-[#0b0d10] shrink-0" loading="lazy">
+                  <div class="min-w-0">
+                    <div class="flex items-center gap-1.5 min-w-0">
+                      <a href="/mixer/<%= r.mixer_id %>"
+                         class="text-[13px] font-semibold text-white truncate hover:underline"><%= r.name %></a>
+                      <% if (r.isRoot) { %>
+                        <span class="lb-tag og">OG</span>
+                      <% } else if (r.depth > 1) { %>
+
+                        <span class="lb-tag" title="<%= r.depth %> steps from the original">R<%= r.depth %></span>
+                      <% } %>
+                    </div>
+                    <div class="flex items-center gap-1.5 text-[10.5px] text-textTertiary min-w-0">
+                      <span class="shrink-0"><%= r.ticker %></span>
+                      <% if (r.creatorHandle) { %>
+                        <span class="text-[#3d434b] shrink-0">·</span>
+                        <a href="https://x.com/<%= r.creatorHandle %>" target="_blank" rel="noopener"
+                           data-xcard="<%= r.creatorHandle %>"
+                           class="shrink-0 hover:text-[#2fbaff] transition-colors">@<%= r.creatorHandle %></a>
+                      <% } %>
+                      <% if (r.parentName) { %>
+                        <span class="text-[#3d434b] shrink-0">·</span>
+                        <span class="truncate">from <%= r.parentName %></span>
+                      <% } else { %>
+                        <span class="text-[#3d434b] shrink-0">·</span>
+                        <span class="shrink-0"><%= r.tokenCount %> assets</span>
+                      <% } %>
+                    </div>
+                  </div>
+                </div>
+              </td>
+
+              <td class="lb-num num text-[13px] font-bold"
+                  style="color:<%= (r.sir === null || r.sir === undefined) ? '#5a616b' : (r.sir >= 0 ? '#22c55e' : '#f6465d') %>">
+                <%= (r.sir === null || r.sir === undefined) ? '—'
+                    : ((r.sir >= 0 ? '+' : '') + Number(r.sir).toFixed(2) + '%') %>
+              </td>
+
+              <td class="lb-num num text-[12px] lb-col-opt"
+                  style="color:<%= (r.change24h === null || r.change24h === undefined) ? '#5a616b' : (r.change24h >= 0 ? '#22c55e' : '#f6465d') %>">
+                <%= (r.change24h === null || r.change24h === undefined) ? '—'
+                    : ((r.change24h >= 0 ? '+' : '') + Number(r.change24h).toFixed(2) + '%') %>
+              </td>
+
+              <td class="lb-num num text-[12px] text-gray-300 lb-col-opt">
+                <%= Number(r.netSol).toFixed(2) %>
+              </td>
+
+              <td class="lb-num num text-[12px] text-gray-300"><%= r.investors %></td>
+
+              <td class="lb-num num text-[12px] text-white">
+                <% if (r.price !== null && r.price !== undefined) { %>
+                  $<%= r.price >= 1 ? Number(r.price).toFixed(2)
+                       : (r.price >= 0.01 ? Number(r.price).toFixed(4) : Number(r.price).toPrecision(3)) %>
+                <% } else { %>
+                  <span class="text-[#5a616b]">&mdash;</span>
+                <% } %>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="text-[10.5px] text-textTertiary mt-3 leading-relaxed">
+      SIR is each basket's return since it first priced, so a newer entrant is measured over a
+      shorter period than the original. &ldquo;Net in&rdquo; is money paid in less money taken
+      out &mdash; cash flow, not the current value of the vaults.
+    </p>
+  </div>
+
+  <script>
+
+    document.querySelectorAll('.lb-row').forEach(function (row) {
+      row.addEventListener('click', function (e) {
+        if (e.target.closest('a')) return;
+        var href = row.dataset.href;
+        if (href) window.location.href = href;
+      });
+    });
+  </script>
+
+  <%- include('partials/xcard') %>
+</body>
+</html>

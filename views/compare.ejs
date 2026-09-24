@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= original.name %> vs <%= challenger.name %> · Mixer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            background: '#0b0d10', surface: '#101317', stroke: '#21262d',
+            primary: '#7453E2', textSecondary: '#7d8590', textTertiary: '#5a616b'
+          }
+        }
+      }
+    }
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .tnum { font-variant-numeric: tabular-nums; }
+    .kind-added     { color: #22c55e; }
+    .kind-removed   { color: #f6465d; }
+    .kind-increased { color: #4ade80; }
+    .kind-decreased { color: #fb923c; }
+    .kind-unchanged { color: #5a616b; }
+    .bar { height: 6px; border-radius: 999px; background: #1e2228; overflow: hidden; }
+    .bar > span { display: block; height: 100%; border-radius: 999px; }
+  </style>
+</head>
+
+<body class="bg-background text-white min-h-screen">
+
+  <%- include('partials/appnav', { user: user, active: '' }) %>
+
+  <%
+    function pct(v) { return v === null || v === undefined ? '—' : (Number(v) * 100).toFixed(1) + '%'; }
+    function sol(v) {
+      var n = Number(v) || 0;
+      if (n === 0) return '0';
+      if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
+      if (n >= 1) return n.toFixed(2);
+      return n.toFixed(4);
+    }
+    function day(ts) {
+      return ts ? new Date(ts).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+    }
+    function sym(addr) {
+      var t = tokenMap[addr];
+      return (t && (t.symbol || t.name)) || addr.slice(0, 4) + '…';
+    }
+    function handleOf(m) { return handles[m.created_by] || null; }
+    function chg(m) {
+      var d = market[m.mixer_id];
+      return (d && d.changes && d.changes['24h'] !== undefined) ? d.changes['24h'] : null;
+    }
+
+    var KIND_LABEL = {
+      added: 'Added', removed: 'Removed', increased: 'Increased',
+      decreased: 'Decreased', unchanged: 'Unchanged'
+    };
+
+    var ageGapDays = Math.abs(
+      (new Date(challenger.created_at) - new Date(original.created_at)) / 86400000
+    );
+  %>
+
+  <div class="max-w-6xl mx-auto px-5 py-8">
+
+    <div class="mb-6">
+      <a href="/mixer/<%= challenger.mixer_id %>" class="text-[12px] text-textSecondary hover:text-white transition-colors">&larr; Back</a>
+      <h1 class="text-2xl font-bold tracking-tight mt-2">
+        <%= original.name %> <span class="text-textTertiary font-normal">vs</span> <%= challenger.name %>
+      </h1>
+      <p class="text-sm text-textSecondary mt-1">
+        <% if (related) { %>
+          A remix and the mixer it argues against.
+        <% } else { %>
+          Two independent mixers, compared side by side.
+        <% } %>
+      </p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+      <% [original, challenger].forEach(function (m, i) { %>
+        <%
+          var isChallenger = i === 1;
+          var c = chg(m);
+          var cap = invested[m.mixer_id] || {};
+        %>
+        <div class="rounded-2xl border <%= isChallenger ? 'border-primary/40' : 'border-stroke' %> bg-surface p-5">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="text-[10px] uppercase tracking-wider font-bold <%= isChallenger ? 'text-primary' : 'text-textSecondary' %>">
+              <%= related ? (isChallenger ? 'The remix' : 'The original') : (isChallenger ? 'B' : 'A') %>
+            </span>
+            <% if (m.image && m.image.trim()) { %>
+              <img src="<%= m.image %>" alt="" class="w-5 h-5 rounded object-cover border border-stroke ml-auto">
+            <% } %>
+          </div>
+
+          <a href="/mixer/<%= m.mixer_id %>" class="text-lg font-bold hover:underline"><%= m.name %></a>
+          <span class="text-[11px] px-1.5 py-0.5 rounded bg-white/5 border border-stroke text-textSecondary ml-1"><%= m.ticker %></span>
+          <% if (handleOf(m)) { %>
+            <span class="text-[12px] text-textSecondary block mt-0.5">by @<%= handleOf(m) %></span>
+          <% } %>
+
+          <div class="mt-3">
+            <% if (m.thesis_title) { %>
+              <p class="text-sm font-semibold text-gray-200">&ldquo;<%= m.thesis_title %>&rdquo;</p>
+            <% } %>
+            <% if (m.thesis) { %>
+              <p class="text-[13px] text-gray-400 mt-1.5 leading-relaxed whitespace-pre-line"><%= m.thesis %></p>
+            <% } %>
+            <% if (!m.thesis_title && !m.thesis) { %>
+              <p class="text-[13px] text-textTertiary italic">No thesis was written.</p>
+            <% } %>
+          </div>
+
+          <% if (isChallenger && m.counter_thesis) { %>
+            <div class="mt-3 pt-3 border-t border-stroke">
+              <p class="text-[10px] uppercase tracking-wider text-primary font-bold mb-1">Why they disagree</p>
+              <p class="text-[13px] text-gray-300 leading-relaxed whitespace-pre-line"><%= m.counter_thesis %></p>
+            </div>
+          <% } %>
+
+          <div class="mt-4 pt-3 border-t border-stroke grid grid-cols-3 gap-2 text-center">
+            <div>
+              <p class="text-[10px] uppercase tracking-wider text-textTertiary font-semibold">Invested</p>
+              <p class="text-sm font-semibold tnum mt-0.5"><%= sol(cap.netSol) %> <span class="text-[10px] text-textSecondary font-normal">SOL</span></p>
+            </div>
+            <div>
+              <p class="text-[10px] uppercase tracking-wider text-textTertiary font-semibold">Investors</p>
+              <p class="text-sm font-semibold tnum mt-0.5"><%= cap.investors || 0 %></p>
+            </div>
+            <div>
+              <p class="text-[10px] uppercase tracking-wider text-textTertiary font-semibold">24h</p>
+              <p class="text-sm font-semibold tnum mt-0.5"
+                 style="color:<%= c === null ? '#5a616b' : (c >= 0 ? '#22c55e' : '#f6465d') %>">
+                <%= c === null ? '—' : (c >= 0 ? '+' : '') + Number(c).toFixed(2) + '%' %>
+              </p>
+            </div>
+          </div>
+          <p class="text-[11px] text-textTertiary mt-2 text-center">Launched <%= day(m.created_at) %></p>
+        </div>
+      <% }) %>
+    </div>
+
+    <% if (ageGapDays >= 1) { %>
+      <div class="mb-6 px-4 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[12px]">
+        These mixers launched <%= Math.round(ageGapDays) %> day<%= Math.round(ageGapDays) === 1 ? '' : 's' %> apart,
+        so they have not been exposed to the same market. Only the 24h figures above compare like with like.
+      </div>
+    <% } %>
+
+    <section class="bg-surface border border-stroke rounded-2xl overflow-hidden">
+      <div class="px-5 py-4 border-b border-stroke">
+        <h2 class="text-base font-semibold">Where the allocations differ</h2>
+        <p class="text-[12px] text-textSecondary mt-0.5">
+          <%= summary.changed %> change<%= summary.changed === 1 ? '' : 's' %>:
+          <%= summary.added %> added, <%= summary.removed %> removed,
+          <%= summary.increased %> increased, <%= summary.decreased %> decreased.
+          <% if (usedSnapshot) { %>
+            <span class="text-textTertiary">Compared against the original as it stood when this remix was made.</span>
+          <% } %>
+        </p>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-black/30 text-textSecondary">
+            <tr>
+              <th class="text-left  font-semibold px-5 py-3 text-[10px] uppercase tracking-wider">Asset</th>
+              <th class="text-right font-semibold px-4 py-3 text-[10px] uppercase tracking-wider"><%= related ? 'Original' : 'A' %></th>
+              <th class="text-right font-semibold px-4 py-3 text-[10px] uppercase tracking-wider"><%= related ? 'Remix' : 'B' %></th>
+              <th class="text-right font-semibold px-4 py-3 text-[10px] uppercase tracking-wider">Change</th>
+              <th class="text-left  font-semibold px-5 py-3 text-[10px] uppercase tracking-wider"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <% rows.forEach(function (r) { %>
+              <tr class="border-t border-stroke">
+                <td class="px-5 py-3">
+                  <div class="flex items-center gap-2 min-w-0">
+                    <img src="/images/tokens/<%= r.address %>" alt="" class="w-6 h-6 rounded-full border border-stroke bg-black/40 shrink-0"
+                         onerror="this.style.visibility='hidden'">
+                    <span class="font-medium truncate"><%= sym(r.address) %></span>
+                  </div>
+                </td>
+                <td class="px-4 py-3 text-right tnum <%= r.from === null ? 'text-textTertiary' : '' %>"><%= pct(r.from) %></td>
+                <td class="px-4 py-3 text-right tnum <%= r.to === null ? 'text-textTertiary' : '' %>"><%= pct(r.to) %></td>
+                <td class="px-4 py-3 text-right tnum font-semibold kind-<%= r.kind %>">
+                  <%= r.kind === 'unchanged' ? '—' : (r.delta >= 0 ? '+' : '') + (r.delta * 100).toFixed(1) + '%' %>
+                </td>
+                <td class="px-5 py-3">
+                  <span class="text-[10px] font-semibold uppercase tracking-wider kind-<%= r.kind %>"><%= KIND_LABEL[r.kind] %></span>
+                  <div class="bar mt-1.5 w-28">
+                    <span style="width: <%= Math.min(100, (r.to || 0) * 100) %>%;
+                                 background: <%= r.kind === 'removed' ? '#f6465d' : (r.kind === 'added' ? '#22c55e' : '#7453E2') %>"></span>
+                  </div>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="mt-5 flex items-center gap-3">
+      <a href="/mixer/<%= challenger.mixer_id %>"
+         class="text-[13px] font-semibold px-4 py-2 rounded-lg bg-primary hover:bg-[#6344d1] text-white transition-colors">
+        Open <%= challenger.name %>
+      </a>
+      <a href="/mixer/<%= original.mixer_id %>"
+         class="text-[13px] font-semibold px-4 py-2 rounded-lg border border-stroke text-textSecondary hover:text-white transition-colors">
+        Open <%= original.name %>
+      </a>
+      <a href="/mixer/<%= original.mixer_id %>/remix"
+         class="ml-auto text-[13px] font-semibold px-4 py-2 rounded-lg bg-primary/15 border border-primary/40 text-[#a78bfa] hover:bg-primary hover:text-white transition-colors">
+        Disagree with both? Remix
+      </a>
+    </div>
+
+    <p class="mt-4 text-[11px] text-textTertiary leading-relaxed max-w-3xl">
+      Each mixer here is independent, with its own vault, investors and performance. A remix is not
+      endorsed by the creator of the mixer it was built from. Invested is net SOL in (deposits minus
+      redemptions), not the current market value of the vaults.
+    </p>
+  </div>
+
+</body>
+</html>

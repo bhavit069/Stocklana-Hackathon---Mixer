@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= stats.mixer.name || 'Mixer' %> · Stats</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            background: '#0b0d10', surface: '#15161A', stroke: '#2C2C2C',
+            primary: '#7453E2', textSecondary: '#9AA0A6'
+          }
+        }
+      }
+    }
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+  </style>
+</head>
+
+<body class="bg-background text-white min-h-screen">
+
+  <%- include('partials/appnav', { user: user, active: '' }) %>
+
+    <%
+      var m = stats.mixer;
+      var oc = stats.onChain;
+      var v = stats.volume;
+      var f = stats.fees;
+
+      var fs = stats.feesSol;
+      function fmtSol(n) { return Number(n).toFixed(4); }
+      function fmtUsd(n) { return '$' + Number(n).toFixed(2); }
+      function shortAddr(a) { return a ? a.slice(0, 6) + '…' + a.slice(-6) : '—'; }
+
+      function feeSol(n) {
+        n = Number(n || 0);
+        if (n === 0) return '0';
+        if (n < 0.0001) return n.toFixed(8).replace(/0+$/, '');
+        return n.toFixed(6).replace(/0+$/, '').replace(/\.$/, '');
+      }
+      function pnlColor(n) { return Number(n) >= 0 ? 'text-green-400' : 'text-red-400'; }
+      function signed(n, d) {
+        n = Number(n); d = d == null ? 4 : d;
+        return (n >= 0 ? '+' : '') + n.toFixed(d);
+      }
+    %>
+
+    <div class="max-w-5xl mx-auto px-4 py-8">
+
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+        <div class="flex items-center gap-4 min-w-0">
+          <% if (m.image) { %>
+            <img src="<%= m.image %>" alt="" class="w-14 h-14 rounded-2xl object-cover border border-stroke shrink-0">
+          <% } else { %>
+            <div class="w-14 h-14 rounded-2xl bg-primary/15 border border-primary/25 flex items-center justify-center text-primary font-bold text-xl shrink-0">
+              <%= (m.ticker || m.name || '?').charAt(0).toUpperCase() %>
+            </div>
+          <% } %>
+          <div class="min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <h1 class="text-2xl font-bold tracking-tight truncate"><%= m.name || 'Untitled' %></h1>
+              <span class="text-xs font-mono px-2 py-1 rounded-md bg-white/5 border border-stroke text-textSecondary"><%= m.ticker || '—' %></span>
+              <% if (isCreator) { %>
+                <span class="text-[10px] uppercase tracking-wider font-semibold px-2 py-1 rounded-md bg-primary/15 border border-primary/30 text-primary">Your mixer</span>
+              <% } %>
+              <% if (oc.is_frozen) { %>
+                <span class="text-[10px] uppercase tracking-wider font-semibold px-2 py-1 rounded-md bg-red-500/15 border border-red-500/30 text-red-400">Frozen</span>
+              <% } %>
+            </div>
+            <% if (m.description) { %>
+              <p class="text-sm text-textSecondary mt-1 truncate"><%= m.description %></p>
+            <% } %>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 shrink-0">
+          <a href="/mixer/<%= m.mixer_id %>"
+            class="px-4 py-2.5 text-sm font-semibold bg-primary hover:bg-[#6344d1] rounded-lg transition-colors">Trade</a>
+          <a href="<%= stats.explorer %>" target="_blank" rel="noopener"
+            class="px-4 py-2.5 text-sm font-semibold bg-white/5 border border-stroke hover:border-primary/60 rounded-lg transition-colors">Explorer ↗</a>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div class="bg-surface border border-stroke rounded-2xl p-5">
+          <p class="text-[10px] uppercase tracking-wider text-textSecondary font-semibold mb-2">All-time volume</p>
+          <p class="text-2xl font-semibold tabular-nums"><%= fmtSol(v.buyVolumeSol) %></p>
+          <p class="text-xs text-textSecondary mt-1">SOL bought in</p>
+        </div>
+        <div class="bg-surface border border-stroke rounded-2xl p-5">
+          <p class="text-[10px] uppercase tracking-wider text-textSecondary font-semibold mb-2">Holders</p>
+          <p class="text-2xl font-semibold tabular-nums"><%= stats.holderCount %></p>
+          <p class="text-xs text-textSecondary mt-1"><%= v.uniqueTraders %> unique trader<%= v.uniqueTraders === 1 ? '' : 's' %></p>
+        </div>
+        <div class="bg-surface border border-stroke rounded-2xl p-5">
+          <p class="text-[10px] uppercase tracking-wider text-textSecondary font-semibold mb-2">Fees generated</p>
+          <% if (fs) { %>
+            <p class="text-2xl font-semibold tabular-nums"><%= feeSol(fs.totalSol) %> <span class="text-sm text-textSecondary font-normal">SOL</span></p>
+            <p class="text-xs text-textSecondary mt-1">
+              <%= fs.totalUsd != null ? fmtUsd(fs.totalUsd) : '—' %><%= fs.complete ? '' : ' · partial' %>
+            </p>
+          <% } else { %>
+            <p class="text-2xl font-semibold tabular-nums text-textSecondary">—</p>
+            <p class="text-xs text-textSecondary mt-1">fee data unavailable</p>
+          <% } %>
+        </div>
+        <div class="bg-surface border border-stroke rounded-2xl p-5">
+          <p class="text-[10px] uppercase tracking-wider text-textSecondary font-semibold mb-2">Trades</p>
+          <p class="text-2xl font-semibold tabular-nums"><%= v.tradeCount %></p>
+          <p class="text-xs text-textSecondary mt-1"><%= v.buyCount %> buy · <%= v.sellCount %> sell</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+
+        <section class="bg-surface border border-stroke rounded-2xl p-6">
+          <h2 class="text-lg font-semibold mb-1">Fee split</h2>
+          <p class="text-xs text-textSecondary mb-5">
+            <%= (oc.trade_fee_bps / 100).toFixed(2) %>% of every trade, taken in SOL &mdash; on the way in when you buy, and on the way out when you sell.
+          </p>
+
+          <%
+            var creatorPct = oc.creator_fee_share_bps / 100;
+            var platformPct = 100 - creatorPct;
+          %>
+
+          <div class="flex h-3 rounded-full overflow-hidden mb-4 bg-black/40">
+            <div class="bg-primary" style="width: <%= creatorPct %>%"></div>
+            <div class="bg-gray-600" style="width: <%= platformPct %>%"></div>
+          </div>
+
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="w-2.5 h-2.5 rounded-sm bg-primary shrink-0"></span>
+                <span class="text-sm">Creator</span>
+                <span class="text-xs text-textSecondary">(<%= creatorPct.toFixed(0) %>%)</span>
+              </div>
+              <span class="text-right">
+                <span class="text-sm font-semibold tabular-nums block"><%= fs ? feeSol(fs.creatorSol) + ' SOL' : '—' %></span>
+                <% if (fs && fs.creatorUnclaimedSol > 0) { %>
+                  <span class="text-[11px] text-green-400"><%= feeSol(fs.creatorUnclaimedSol) %> unclaimed</span>
+                <% } %>
+              </span>
+            </div>
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="w-2.5 h-2.5 rounded-sm bg-gray-600 shrink-0"></span>
+                <span class="text-sm">Platform</span>
+                <span class="text-xs text-textSecondary">(<%= platformPct.toFixed(0) %>%)</span>
+              </div>
+              <span class="text-right">
+                <span class="text-sm font-semibold tabular-nums block"><%= fs ? feeSol(fs.treasurySol) + ' SOL' : '—' %></span>
+                <% if (fs && fs.treasuryUnclaimedSol > 0) { %>
+                  <span class="text-[11px] text-green-400"><%= feeSol(fs.treasuryUnclaimedSol) %> unclaimed</span>
+                <% } %>
+              </span>
+            </div>
+          </div>
+
+          <div class="mt-5 pt-4 border-t border-stroke space-y-2 text-xs">
+            <div class="flex justify-between gap-3">
+              <span class="text-textSecondary">Creator wallet</span>
+              <a href="https://explorer.solana.com/address/<%= oc.creator_wallet %>?cluster=devnet" target="_blank"
+                rel="noopener" class="font-mono text-gray-300 hover:text-white hover:underline truncate"><%= shortAddr(oc.creator_wallet) %></a>
+            </div>
+            <div class="flex justify-between gap-3">
+              <span class="text-textSecondary">Platform treasury</span>
+              <a href="https://explorer.solana.com/address/<%= oc.treasury %>?cluster=devnet" target="_blank"
+                rel="noopener" class="font-mono text-gray-300 hover:text-white hover:underline truncate"><%= shortAddr(oc.treasury) %></a>
+            </div>
+          </div>
+        </section>
+
+        <section class="bg-surface border border-stroke rounded-2xl p-6">
+          <h2 class="text-lg font-semibold mb-5">Details</h2>
+          <dl class="space-y-3 text-sm">
+            <div class="flex justify-between gap-4">
+              <dt class="text-textSecondary">Creator</dt>
+              <dd><a href="/creator/<%= m.created_by %>" class="text-primary hover:underline">View profile</a></dd>
+            </div>
+            <div class="flex justify-between gap-4">
+              <dt class="text-textSecondary">Created</dt>
+              <dd class="text-right"><%= new Date(m.created_at).toLocaleString() %></dd>
+            </div>
+            <div class="flex justify-between gap-4">
+              <dt class="text-textSecondary">Status</dt>
+              <dd><%= oc.is_frozen ? 'Frozen' : (oc.is_finalized ? 'Active' : 'Not finalized') %></dd>
+            </div>
+            <div class="flex justify-between gap-4">
+              <dt class="text-textSecondary">Constituents</dt>
+              <dd><%= oc.vaults_created %> / <%= oc.token_count %> vaults</dd>
+            </div>
+            <div class="flex justify-between gap-4">
+              <dt class="text-textSecondary">Total shares</dt>
+              <dd class="font-mono text-xs"><%= oc.total_shares %></dd>
+            </div>
+            <div class="flex justify-between gap-4">
+              <dt class="text-textSecondary">First trade</dt>
+              <dd><%= v.firstTrade ? new Date(v.firstTrade).toLocaleDateString() : '—' %></dd>
+            </div>
+            <div class="flex justify-between gap-4">
+              <dt class="text-textSecondary">Last trade</dt>
+              <dd><%= v.lastTrade ? new Date(v.lastTrade).toLocaleString() : '—' %></dd>
+            </div>
+            <div class="flex justify-between gap-4">
+              <dt class="text-textSecondary">Mixer address</dt>
+              <dd class="font-mono text-xs truncate" title="<%= m.mixer_id %>"><%= shortAddr(m.mixer_id) %></dd>
+            </div>
+          </dl>
+        </section>
+      </div>
+
+      <section class="bg-surface border border-stroke rounded-2xl overflow-hidden mb-8">
+        <div class="px-6 py-4 border-b border-stroke">
+          <h2 class="text-lg font-semibold">Fee revenue</h2>
+          <p class="text-xs text-textSecondary mt-0.5">
+            Users pay in SOL and are paid out in SOL, so fees are earned in SOL.
+            Read from the on-chain fee accounts, not estimated from volume.
+          </p>
+        </div>
+
+        <% if (!fs) { %>
+          <p class="px-6 py-8 text-sm text-textSecondary text-center">Fee data unavailable right now.</p>
+        <% } else { %>
+          <div class="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-[#2C2C2C]">
+            <div class="px-6 py-5">
+              <p class="text-[10px] uppercase tracking-wider text-textSecondary font-semibold mb-2">Total earned</p>
+              <p class="text-xl font-semibold tabular-nums"><%= feeSol(fs.totalSol) %> <span class="text-xs text-textSecondary font-normal">SOL</span></p>
+              <p class="text-xs text-textSecondary mt-1"><%= fs.totalUsd != null ? fmtUsd(fs.totalUsd) : '—' %></p>
+            </div>
+            <div class="px-6 py-5">
+              <p class="text-[10px] uppercase tracking-wider text-textSecondary font-semibold mb-2">Creator share</p>
+              <p class="text-xl font-semibold tabular-nums"><%= feeSol(fs.creatorSol) %> <span class="text-xs text-textSecondary font-normal">SOL</span></p>
+              <p class="text-xs text-textSecondary mt-1">
+                <%= fs.creatorUnclaimedSol > 0 ? feeSol(fs.creatorUnclaimedSol) + ' unclaimed' : 'nothing unclaimed' %>
+              </p>
+            </div>
+            <div class="px-6 py-5">
+              <p class="text-[10px] uppercase tracking-wider text-textSecondary font-semibold mb-2">Platform share</p>
+              <p class="text-xl font-semibold tabular-nums"><%= feeSol(fs.treasurySol) %> <span class="text-xs text-textSecondary font-normal">SOL</span></p>
+              <p class="text-xs text-textSecondary mt-1">
+                <%= fs.treasuryUnclaimedSol > 0 ? feeSol(fs.treasuryUnclaimedSol) + ' unclaimed' : 'nothing unclaimed' %>
+              </p>
+            </div>
+          </div>
+
+          <div class="px-6 py-4 border-t border-stroke bg-black/20">
+            <p class="text-[11px] text-textSecondary leading-relaxed">
+              <span class="text-gray-400 font-medium">How it works:</span>
+              on a buy the fee is taken from your SOL before the basket is bought; on a sell it is
+              taken from the SOL the basket converts back into. The protocol holds the accrual in
+              the constituent tokens internally, valued here at the same rate the sell path uses.
+              <% if (!fs.complete) { %>
+                <span class="text-amber-400">Some tokens could not be converted, so this total is partial.</span>
+              <% } %>
+            </p>
+          </div>
+        <% } %>
+      </section>
+
+      <section class="bg-surface border border-stroke rounded-2xl overflow-hidden">
+        <div class="px-6 py-4 border-b border-stroke flex items-center justify-between">
+          <div>
+            <h2 class="text-lg font-semibold">Top holders</h2>
+            <p class="text-xs text-textSecondary mt-0.5">Ranked by stake. Positions from chain, cost basis from trade history.</p>
+          </div>
+          <span class="text-sm text-textSecondary"><%= stats.holderCount %> holder<%= stats.holderCount === 1 ? '' : 's' %></span>
+        </div>
+
+        <% if (!stats.holders.length) { %>
+          <p class="px-6 py-8 text-sm text-textSecondary text-center">No holders yet.</p>
+        <% } else { %>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-black/30 text-textSecondary">
+                <tr>
+                  <th class="text-left  font-semibold px-6 py-3 text-[11px] uppercase tracking-wider">#</th>
+                  <th class="text-left  font-semibold px-4 py-3 text-[11px] uppercase tracking-wider">Holder</th>
+                  <th class="text-right font-semibold px-4 py-3 text-[11px] uppercase tracking-wider">Share</th>
+                  <th class="text-right font-semibold px-4 py-3 text-[11px] uppercase tracking-wider">Value</th>
+                  <th class="text-right font-semibold px-4 py-3 text-[11px] uppercase tracking-wider">Cost</th>
+                  <th class="text-right font-semibold px-6 py-3 text-[11px] uppercase tracking-wider">U. P/L</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% stats.holders.slice(0, 50).forEach(function (h) { %>
+                  <%
+
+                    var isCreatorRow = oc.creator_wallet && h.owner === oc.creator_wallet;
+                    var medal = h.rank === 1 ? 'text-amber-300' : (h.rank === 2 ? 'text-gray-300' : (h.rank === 3 ? 'text-amber-600' : 'text-textSecondary'));
+                  %>
+                  <tr class="border-t border-stroke hover:bg-white/[0.02] transition">
+                    <td class="px-6 py-3">
+                      <span class="text-xs font-semibold tabular-nums <%= medal %>"><%= h.rank %></span>
+                    </td>
+                    <td class="px-4 py-3">
+                      <div class="flex items-center gap-2 min-w-0">
+                        <a href="https://explorer.solana.com/address/<%= h.owner %>?cluster=devnet" target="_blank"
+                           rel="noopener"
+                           class="font-mono text-xs text-gray-300 hover:text-white hover:underline truncate"><%= shortAddr(h.owner) %></a>
+                        <% if (isCreatorRow) { %>
+                          <span class="text-[9px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded bg-primary/15 text-primary border border-primary/30 shrink-0">Creator</span>
+                        <% } %>
+                      </div>
+                      <% if (h.tradeCount) { %>
+                        <span class="text-[10px] text-textSecondary"><%= h.tradeCount %> trade<%= h.tradeCount === 1 ? '' : 's' %></span>
+                      <% } %>
+                    </td>
+                    <td class="px-4 py-3 text-right">
+                      <div class="flex items-center justify-end gap-2">
+                        <div class="w-16 h-1.5 rounded-full bg-black/40 overflow-hidden hidden sm:block">
+                          <div class="h-full <%= isCreatorRow ? 'bg-primary' : 'bg-gray-500' %>" style="width: <%= Math.min(100, h.percent) %>%"></div>
+                        </div>
+                        <span class="tabular-nums text-xs w-14 text-right"><%= h.percent.toFixed(2) %>%</span>
+                      </div>
+                    </td>
+                    <td class="px-4 py-3 text-right tabular-nums text-xs">
+                      <%= h.remainingSol != null ? fmtSol(h.remainingSol) + ' SOL' : '—' %>
+                    </td>
+                    <td class="px-4 py-3 text-right tabular-nums text-xs text-textSecondary">
+                      <%= h.costOfRemaining != null ? fmtSol(h.costOfRemaining) + ' SOL' : '—' %>
+                    </td>
+                    <td class="px-6 py-3 text-right tabular-nums text-xs">
+                      <% if (h.unrealisedPnl == null) { %>
+                        <span class="text-textSecondary">—</span>
+                      <% } else { %>
+                        <span class="<%= pnlColor(h.unrealisedPnl) %> font-semibold"><%= signed(h.unrealisedPnl) %></span>
+                        <% if (h.unrealisedPct != null) { %>
+                          <span class="<%= pnlColor(h.unrealisedPnl) %> block text-[10px] opacity-80"><%= signed(h.unrealisedPct, 2) %>%</span>
+                        <% } %>
+                      <% } %>
+                    </td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+          <% if (stats.holders.length > 50) { %>
+            <p class="px-6 py-3 text-[11px] text-textSecondary border-t border-stroke">Showing the top 50 of <%= stats.holders.length %>.</p>
+          <% } %>
+        <% } %>
+      </section>
+    </div>
+
+</body>
+
+</html>

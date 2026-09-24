@@ -1,0 +1,2589 @@
+<%
+
+  var pf = (typeof prefill !== 'undefined' && prefill) ? prefill : null;
+  var startMode = (typeof mode !== 'undefined' && mode === 'meme') ? 'meme' : 'mixer';
+  var sugg = (typeof suggestions !== 'undefined' && suggestions) ? suggestions : { popular: [], trending: [] };
+  var durs = (typeof durations !== 'undefined' && durations) ? durations : [];
+  var cats = (typeof categories !== 'undefined' && categories) ? categories : [];
+  var handle = user && user.xUsername ? '@' + user.xUsername : ((user && user.username) || 'you');
+  var UNITS = [['minutes', 'Minutes'], ['hours', 'Hours'], ['days', 'Days']];
+
+  var CAT_PATHS = {
+    'ai': '<rect x="5" y="5" width="14" height="14" rx="2"/><path d="M9.5 9.5h5v5h-5zM9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/>',
+    'defi': '<circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18M7 6h1v4M16.71 13.88l.7.71-2.82 2.82"/>',
+    'memes': '<circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/>',
+    'pre-ipo': '<path d="m22 7-8.5 8.5-5-5L2 17"/><path d="M16 7h6v6"/>',
+    'gaming': '<rect x="2" y="6" width="20" height="12" rx="4"/><path d="M6 12h4M8 10v4M15 12h.01M18 10h.01"/>',
+    'infra': '<rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/>',
+    'stables': '<circle cx="12" cy="12" r="9"/><path d="M15.5 9h-5a2 2 0 1 0 0 4h3a2 2 0 1 1 0 4h-5M12 6.5v11"/>',
+    'other': '<circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/>'
+  };
+  function catIcon(id) {
+    var d = CAT_PATHS[id] || CAT_PATHS.other;
+    return '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
+  }
+%>
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= pf ? 'Remix ' + pf.parent.name : 'Create a mixer' %> · Mixer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0b0d10;
+      --panel: #111317;
+      --field: #0d0f13;
+      --field-2: #16191e;
+      --stroke: rgba(255, 255, 255, .07);
+      --stroke-2: rgba(255, 255, 255, .12);
+      --text: #eef0f3;
+      --muted: #8b929c;
+      --dim: #5d646e;
+      --up: #22c55e;
+      --down: #f6465d;
+      --warn: #eab308;
+      --ease: cubic-bezier(.16, 1, .3, 1);
+      --spring: cubic-bezier(.34, 1.56, .64, 1);
+    }
+    /* The page takes on the colour of what is being made: the nav's violet
+       for a long-term mixer, the /meme yellow for a meme run. Solid fills
+       only -- the same colours as the nav's Create Mixer / Launch Meme
+       buttons, so the page and the button that led here match. */
+    body[data-type="mixer"] {
+      --acc: #8b6ff0;
+      --acc-strong: #7453E2;
+      --acc-soft: rgba(116, 83, 226, .14);
+      --acc-line: rgba(139, 111, 240, .55);
+      --acc-grad: #7453E2;
+      --acc-ink: #fff;
+      --acc-glow: rgba(116, 83, 226, .40);
+    }
+    body[data-type="meme"] {
+      --acc: #ffd23f;
+      --acc-strong: #f5c518;
+      --acc-soft: rgba(255, 210, 63, .10);
+      --acc-line: rgba(255, 210, 63, .50);
+      --acc-grad: #ffd23f;
+      --acc-ink: #1a1204;
+      --acc-glow: rgba(255, 210, 63, .28);
+    }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    .display { font-family: 'Bricolage Grotesque', 'Inter', sans-serif; letter-spacing: -.02em; }
+    .num { font-variant-numeric: tabular-nums; }
+    [hidden] { display: none !important; }
+
+    /* ---------------- Stepper ---------------- */
+    .stepper { display: flex; gap: 6px; list-style: none; margin: 0; padding: 0; }
+    .st {
+      flex: 1; min-width: 0;
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      cursor: pointer;
+      color: var(--dim);
+      transition: background .2s ease, color .2s ease;
+      position: relative;
+    }
+    .st::after {
+      content: ''; position: absolute; left: 12px; right: 12px; bottom: 0; height: 2px; border-radius: 2px;
+      background: var(--stroke);
+      transition: background .3s ease;
+    }
+    .st:hover { background: rgba(255, 255, 255, .025); color: var(--muted); }
+    .st.is-done { color: var(--muted); }
+    .st.is-done::after { background: var(--acc-line); }
+    .st.is-active { color: var(--text); }
+    .st.is-active::after { background: var(--acc-grad); }
+    .st-n {
+      width: 24px; height: 24px; border-radius: 8px; flex-shrink: 0;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700;
+      background: rgba(255, 255, 255, .05); border: 1px solid var(--stroke-2);
+      transition: background .25s ease, border-color .25s ease, color .25s ease, transform .25s var(--spring);
+    }
+    .st.is-active .st-n { background: var(--acc-grad); border-color: transparent; color: var(--acc-ink); transform: scale(1.06); }
+    .st.is-done .st-n { background: var(--acc-soft); border-color: var(--acc-line); color: var(--acc); }
+    .st-l { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* ---------------- Panels + the slide between them ---------------- */
+    .wizard {
+      border-radius: 20px;
+      background: var(--panel);
+      border: 1px solid var(--stroke);
+      overflow-x: clip;
+    }
+    .panel { padding: 26px 28px 8px; transition: opacity .42s var(--ease), transform .42s var(--ease); }
+    .panel.out-left  { opacity: 0; transform: translateX(-56px); transition-duration: .24s; }
+    .panel.out-right { opacity: 0; transform: translateX(56px);  transition-duration: .24s; }
+    .panel.in-right  { opacity: 0; transform: translateX(56px);  transition: none; }
+    .panel.in-left   { opacity: 0; transform: translateX(-56px); transition: none; }
+    @keyframes slideInUp { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+    .reveal-in { animation: slideInUp .6s var(--ease) both; }
+
+    .h2 { font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
+    .sub { font-size: 13px; color: var(--muted); margin-top: 3px; line-height: 1.5; }
+    .sec-k { font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 10px; }
+
+    /* ---------------- Fields ---------------- */
+    .field { margin-top: 18px; }
+    .lbl { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 12.5px; font-weight: 600; color: #c9ced6; margin-bottom: 7px; }
+    .lbl .opt { font-weight: 500; color: var(--dim); }
+    .cnt { font-size: 11px; font-weight: 500; color: var(--dim); font-variant-numeric: tabular-nums; }
+    .cnt.is-near { color: var(--warn); }
+    .inp, .ta {
+      width: 100%;
+      background: var(--field);
+      border: 1px solid var(--stroke-2);
+      border-radius: 12px;
+      color: var(--text);
+      font-size: 14px;
+      padding: 11px 13px;
+      outline: none;
+      transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+    }
+    .inp::placeholder, .ta::placeholder { color: #4a5059; }
+    .inp:hover, .ta:hover { border-color: rgba(255, 255, 255, .18); }
+    .inp:focus, .ta:focus { border-color: var(--acc-line); box-shadow: 0 0 0 3px var(--acc-soft); background: #0f1216; }
+    .ta { resize: vertical; min-height: 92px; line-height: 1.55; }
+    .inp-lg { font-size: 18px; font-weight: 600; padding: 12px 14px; }
+    .inp-ticker { text-transform: uppercase; font-weight: 700; letter-spacing: .04em; }
+    .is-invalid { border-color: rgba(246, 70, 93, .6) !important; box-shadow: 0 0 0 3px rgba(246, 70, 93, .12) !important; }
+    .field-err { font-size: 12px; color: #ff8a9b; margin-top: 6px; }
+    .field-hint { font-size: 12px; color: var(--dim); margin-top: 6px; line-height: 1.5; }
+    @keyframes shake { 0%, 100% { transform: none; } 20% { transform: translateX(-5px); } 40% { transform: translateX(5px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(3px); } }
+    .shake { animation: shake .4s ease; }
+
+    .prefix-wrap { position: relative; }
+    .prefix-wrap .prefix { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--dim); font-weight: 700; pointer-events: none; }
+    .prefix-wrap .inp { padding-left: 26px; }
+
+    .chip-suggest {
+      display: inline-flex; align-items: center; gap: 6px;
+      margin-top: 7px; padding: 3px 9px; border-radius: 999px;
+      font-size: 11.5px; font-weight: 600; color: var(--acc);
+      background: var(--acc-soft); border: 1px solid var(--acc-line);
+      transition: transform .15s var(--spring);
+    }
+    .chip-suggest:hover { transform: scale(1.04); }
+
+    /* ---------------- Type cards ---------------- */
+    .type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .type-card {
+      position: relative; text-align: left;
+      padding: 16px 16px 14px;
+      border-radius: 16px;
+      background: var(--field);
+      border: 1px solid var(--stroke-2);
+      transition: border-color .2s ease, background .2s ease, transform .2s var(--spring), box-shadow .2s ease;
+    }
+    .type-card:hover:not(:disabled) { border-color: rgba(255, 255, 255, .22); transform: translateY(-2px); }
+    .type-card:disabled { cursor: not-allowed; opacity: .45; }
+    .type-card .t-ico {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 38px; height: 38px; border-radius: 11px;
+      color: var(--muted); background: rgba(255, 255, 255, .04); border: 1px solid var(--stroke-2);
+      transition: color .2s ease, background .2s ease, border-color .2s ease;
+    }
+    .type-card[data-type="mixer"].is-active .t-ico { color: #b9a4ff; background: rgba(116, 83, 226, .16); border-color: rgba(139, 111, 240, .45); }
+    .type-card[data-type="meme"].is-active .t-ico { color: #ffd23f; background: rgba(255, 210, 63, .12); border-color: rgba(255, 210, 63, .40); }
+    .type-card .t-title { display: block; margin-top: 10px; font-size: 16px; font-weight: 700; }
+    .type-card .t-desc { display: block; margin-top: 4px; font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+    .type-card .t-tag { display: inline-block; margin-top: 10px; font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+    .type-card .t-radio {
+      position: absolute; top: 14px; right: 14px;
+      width: 18px; height: 18px; border-radius: 999px; border: 2px solid var(--stroke-2);
+      transition: border-color .2s ease, background .2s ease;
+    }
+    .type-card.is-active .t-radio { border-color: var(--acc); background: radial-gradient(circle, var(--acc) 0 38%, transparent 42%); }
+    .type-card[data-type="mixer"].is-active { border-color: rgba(139, 111, 240, .7); background: linear-gradient(160deg, rgba(116, 83, 226, .16), var(--field) 70%); box-shadow: 0 10px 30px -18px rgba(116, 83, 226, .8); }
+    .type-card[data-type="meme"].is-active { border-color: rgba(255, 210, 63, .6); background: linear-gradient(160deg, rgba(255, 210, 63, .09), var(--field) 70%); box-shadow: 0 10px 30px -20px rgba(255, 210, 63, .5); }
+    .type-card[data-type="mixer"].is-active .t-tag { color: #b9a4ff; }
+    .type-card[data-type="meme"].is-active .t-tag { color: #ffd23f; }
+
+    /* ---------------- Duration ---------------- */
+    .dur-box {
+      margin-top: 14px; padding: 16px;
+      border-radius: 16px;
+      background: rgba(255, 210, 63, .035);
+      border: 1px solid rgba(255, 210, 63, .22);
+      animation: slideInUp .45s var(--ease) both;
+    }
+    .dur-groups { display: flex; flex-wrap: wrap; gap: 14px 20px; }
+    .dur-unit { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); margin-bottom: 6px; }
+    .dur-opts { display: flex; gap: 6px; }
+    .dur-opt {
+      min-width: 50px; height: 36px; padding: 0 12px;
+      border-radius: 10px;
+      font-size: 13px; font-weight: 700; color: var(--muted);
+      background: rgba(0, 0, 0, .25); border: 1px solid var(--stroke-2);
+      transition: background .15s ease, color .15s ease, border-color .15s ease, transform .15s var(--spring);
+    }
+    .dur-opt:hover { color: var(--text); border-color: var(--acc-line); }
+    .dur-opt.is-active { background: var(--acc-grad); color: var(--acc-ink); border-color: transparent; transform: scale(1.05); }
+    .dur-end { font-size: 12px; color: var(--acc); font-weight: 500; }
+    .dur-note { font-size: 11.5px; color: var(--muted); margin-top: 12px; line-height: 1.5; }
+
+    /* ---------------- Logo ---------------- */
+    .logo-drop {
+      width: 96px; height: 96px; border-radius: 22px; flex-shrink: 0;
+      border: 1.5px dashed rgba(255, 255, 255, .18);
+      background: var(--field);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; overflow: hidden; position: relative;
+      transition: border-color .15s ease, background .15s ease, transform .15s var(--spring);
+    }
+    .logo-drop:hover, .logo-drop:focus-visible { border-color: var(--acc-line); outline: none; transform: scale(1.02); }
+    .logo-drop.is-dragover { border-color: var(--acc); background: var(--acc-soft); }
+    .logo-drop img { width: 100%; height: 100%; object-fit: cover; }
+    .logo-placeholder { display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--dim); font-size: 10.5px; font-weight: 600; }
+    .link-btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      height: 26px; padding: 0 9px; border-radius: 999px;
+      font-size: 11.5px; font-weight: 600; color: var(--muted);
+      background: rgba(255, 255, 255, .03); border: 1px solid var(--stroke-2);
+      transition: color .15s ease, border-color .15s ease, background .15s ease;
+    }
+    .link-btn:hover { color: var(--text); border-color: rgba(255, 255, 255, .22); background: rgba(255, 255, 255, .06); }
+    .link-btn.is-on { color: var(--acc); border-color: var(--acc-line); background: var(--acc-soft); }
+
+    /* ---------------- Categories ---------------- */
+    .cat-grid { display: flex; flex-wrap: wrap; gap: 7px; }
+    .category-option {
+      display: inline-flex; align-items: center; gap: 7px;
+      height: 34px; padding: 0 12px;
+      border-radius: 999px;
+      font-size: 12.5px; font-weight: 600; color: var(--muted);
+      background: var(--field); border: 1px solid var(--stroke-2);
+      transition: border-color .15s ease, background .15s ease, color .15s ease, transform .15s var(--spring);
+    }
+    .category-option:hover { color: var(--text); border-color: rgba(255, 255, 255, .2); }
+    .category-option.is-active { color: var(--text); border-color: var(--acc-line); background: var(--acc-soft); transform: scale(1.03); }
+    .category-option .c-ico { display: inline-flex; color: var(--dim); transition: color .15s ease; }
+    .category-option:hover .c-ico { color: var(--muted); }
+    .category-option.is-active .c-ico { color: var(--acc); }
+
+    /* ---------------- Mixer Details (basket) ---------------- */
+    .det-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+    .alloc-total { text-align: right; flex-shrink: 0; }
+    @media (max-width: 560px) {
+      .det-head { flex-direction: column; gap: 10px; }
+      .alloc-total { text-align: left; display: flex; align-items: baseline; gap: 10px; }
+    }
+    .alloc-k { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
+    .alloc-v { display: inline-block; font-size: 26px; font-weight: 800; color: var(--acc); transition: color .25s ease; }
+    .alloc-v .of { font-size: 14px; font-weight: 600; color: var(--dim); }
+    .alloc-v.is-full { color: var(--up); }
+    .alloc-v.is-over { color: var(--down); }
+    @keyframes pulseText { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+    .alloc-v.pulse { animation: pulseText .3s ease-in-out; }
+
+    .alloc-bar { display: flex; gap: 2px; height: 10px; border-radius: 999px; overflow: hidden; background: transparent; }
+    .alloc-bar .seg { height: 100%; min-width: 3px; flex-shrink: 1; transition: flex-basis .45s var(--ease); }
+    .alloc-bar .seg:first-child { border-top-left-radius: 999px; border-bottom-left-radius: 999px; }
+    .alloc-bar .seg:last-child { border-top-right-radius: 999px; border-bottom-right-radius: 999px; }
+    .alloc-bar .seg-empty { background: repeating-linear-gradient(135deg, rgba(255, 255, 255, .07) 0 6px, rgba(255, 255, 255, .025) 6px 12px); }
+    .alloc-bar.is-over { box-shadow: 0 0 0 1.5px rgba(246, 70, 93, .7); }
+
+    /* Every .reveal block keeps its entrance animation's transform, and a
+       transform makes its own stacking context -- so the results dropdown's
+       z-index only counted inside this block, and the suggestion chips below
+       painted over it. Lifting the whole block above its siblings fixes it. */
+    .field-search { position: relative; z-index: 20; }
+    .search { position: relative; }
+    .search .inp { padding-left: 40px; height: 48px; font-size: 14px; }
+    .search-ico { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--dim); pointer-events: none; }
+    .search-spin {
+      position: absolute; right: 14px; top: 50%; width: 16px; height: 16px; margin-top: -8px;
+      border: 2px solid var(--stroke-2); border-top-color: var(--acc); border-radius: 999px;
+      animation: spin .7s linear infinite;
+    }
+    .results {
+      position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 30;
+      max-height: 360px; overflow-y: auto;
+      padding: 6px;
+      border-radius: 14px;
+      background: #15181d;
+      border: 1px solid var(--stroke-2);
+      box-shadow: 0 24px 48px -16px rgba(0, 0, 0, .7);
+      animation: slideInUp .22s var(--ease) both;
+    }
+    .res {
+      display: flex; align-items: center; gap: 11px;
+      width: 100%; text-align: left;
+      padding: 9px 10px; border-radius: 10px;
+      transition: background .12s ease;
+    }
+    .res:hover, .res.is-active { background: rgba(255, 255, 255, .05); }
+    .res.is-added { opacity: .55; }
+    .res-logo { width: 32px; height: 32px; border-radius: 999px; object-fit: cover; background: #22262d; flex-shrink: 0; }
+    .res-sym { font-weight: 700; font-size: 13.5px; }
+    .res-name { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .res-meta { margin-left: auto; text-align: right; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+    .res-add { font-size: 11.5px; font-weight: 700; color: var(--acc); }
+    .res-warn { font-size: 10.5px; font-weight: 600; color: var(--warn); margin-top: 2px; }
+    .verified { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 999px; background: #3987e5; color: #fff; font-size: 9px; font-weight: 800; flex-shrink: 0; }
+    .res-empty { padding: 16px 12px; font-size: 12.5px; color: var(--muted); }
+
+    .suggest { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+    .suggest-k { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 600; color: var(--dim); margin-right: 2px; }
+    .suggest-k svg { color: var(--acc); }
+    .sug {
+      display: inline-flex; align-items: center; gap: 6px;
+      height: 30px; padding: 0 10px 0 5px;
+      border-radius: 999px;
+      font-size: 12px; font-weight: 600; color: var(--text);
+      background: var(--field); border: 1px solid var(--stroke-2);
+      transition: border-color .15s ease, transform .15s var(--spring), opacity .15s ease;
+    }
+    .sug:hover { border-color: var(--acc-line); transform: translateY(-1px); }
+    .sug img, .sug .sug-fb { width: 20px; height: 20px; border-radius: 999px; object-fit: cover; background: #22262d; }
+    .sug .sug-fb { display: inline-flex; align-items: center; justify-content: center; font-size: 9px; color: var(--muted); }
+    .sug.is-added { opacity: .4; pointer-events: none; }
+    .sug .sug-chg { font-size: 10.5px; font-weight: 600; }
+
+    .basket { display: flex; flex-direction: column; gap: 8px; }
+    .tk-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 12px 10px 10px;
+      border-radius: 14px;
+      background: var(--field);
+      border: 1px solid var(--stroke);
+      position: relative;
+      transition: border-color .2s ease, background .2s ease;
+    }
+    .tk-row:hover { border-color: var(--stroke-2); }
+    .tk-row.is-error { border-color: rgba(246, 70, 93, .45); }
+    .tk-row.flash { animation: rowFlash .9s ease; }
+    @keyframes rowFlash { 0%, 100% { background: var(--field); } 30% { background: var(--acc-soft); } }
+    @keyframes rowIn { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }
+    @keyframes rowOut { to { opacity: 0; transform: translateX(-16px) scale(.98); } }
+    .row-enter { animation: rowIn .38s var(--ease) both; }
+    .row-exit { animation: rowOut .25s ease forwards; pointer-events: none; }
+    .tk-swatch { width: 4px; align-self: stretch; border-radius: 4px; flex-shrink: 0; }
+    .tk-logo, .tk-logo-fb { width: 38px; height: 38px; border-radius: 999px; object-fit: cover; background: #22262d; flex-shrink: 0; }
+    .tk-logo-fb { display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; color: var(--muted); }
+    .tk-meta { flex: 1; min-width: 0; }
+    .tk-name { display: flex; align-items: center; gap: 6px; font-size: 14px; }
+    .tk-name b { font-weight: 700; }
+    .tk-full { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tk-addr { font-size: 11.5px; color: var(--dim); margin-top: 2px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; display: flex; align-items: center; gap: 8px; }
+    .tk-status { font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 600; }
+    .tk-status.resolving { color: var(--muted); }
+    .tk-status.error { color: #ff8a9b; }
+    .tk-status.risk { color: var(--warn); }
+    .tk-retry { font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 700; color: var(--acc); text-decoration: underline; }
+    .skeleton {
+      background: linear-gradient(90deg, #1b1e23 25%, #2a2e35 50%, #1b1e23 75%);
+      background-size: 200% 100%;
+      animation: skeleton-loading 1.4s infinite;
+      border-radius: 6px;
+    }
+    @keyframes skeleton-loading { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+    .tk-skel-logo { width: 38px; height: 38px; border-radius: 999px; flex-shrink: 0; }
+    .tk-skel-name { width: 120px; height: 14px; margin-bottom: 6px; }
+    .tk-weight { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+    .tk-step {
+      width: 28px; height: 32px; border-radius: 8px;
+      color: var(--muted); font-size: 16px; font-weight: 600; line-height: 1;
+      background: rgba(255, 255, 255, .03); border: 1px solid var(--stroke);
+      transition: color .12s ease, border-color .12s ease, background .12s ease;
+    }
+    .tk-step:hover { color: var(--text); border-color: var(--stroke-2); background: rgba(255, 255, 255, .06); }
+    .tk-input-wrap { position: relative; }
+    .tk-input {
+      width: 76px; height: 36px; padding: 0 22px 0 8px;
+      border-radius: 9px; text-align: right;
+      font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums;
+      color: var(--text); background: #0a0c0f; border: 1px solid var(--stroke-2); outline: none;
+      transition: border-color .15s ease, box-shadow .15s ease;
+    }
+    .tk-input:focus { border-color: var(--acc-line); box-shadow: 0 0 0 3px var(--acc-soft); }
+    .tk-input.is-zero { border-color: rgba(234, 179, 8, .5); }
+    .tk-pct { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 12px; color: var(--dim); pointer-events: none; }
+    .tk-remove {
+      width: 32px; height: 32px; border-radius: 9px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--dim);
+      transition: color .15s ease, background .15s ease;
+    }
+    .tk-remove:hover { color: #ff8a9b; background: rgba(246, 70, 93, .1); }
+    .basket-empty {
+      border: 1.5px dashed var(--stroke-2); border-radius: 16px;
+      padding: 24px 16px; text-align: center;
+      font-size: 13px; color: var(--muted);
+    }
+    .basket-empty .be-ico {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 40px; height: 40px; border-radius: 12px; margin-bottom: 10px;
+      color: var(--acc); background: var(--acc-soft); border: 1px solid var(--acc-line);
+    }
+    .basket-empty .be-t { font-size: 13.5px; font-weight: 600; color: var(--text); }
+    .basket-empty .be-s { font-size: 12px; color: var(--muted); margin-top: 3px; }
+    .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 12.5px; color: var(--muted); }
+    .btn-tool {
+      display: inline-flex; align-items: center; gap: 6px;
+      height: 32px; padding: 0 12px; border-radius: 10px;
+      font-size: 12.5px; font-weight: 600; color: var(--text);
+      background: rgba(255, 255, 255, .04); border: 1px solid var(--stroke-2);
+      transition: background .15s ease, border-color .15s ease;
+    }
+    .btn-tool:hover:not(:disabled) { background: rgba(255, 255, 255, .08); }
+    .btn-tool:disabled { opacity: .4; cursor: not-allowed; }
+    .remain.is-ok { color: var(--up); }
+    .remain.is-over { color: var(--down); }
+
+    /* ---------------- Link preview ---------------- */
+    .link-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      margin-top: 8px; padding: 4px 10px; border-radius: 999px;
+      font-size: 12px; font-weight: 600; color: var(--acc);
+      background: var(--acc-soft); border: 1px solid var(--acc-line);
+    }
+
+    /* ---------------- Launch step ---------------- */
+    .review { border-radius: 16px; border: 1px solid var(--stroke); overflow: hidden; }
+    .rv-row { display: flex; align-items: flex-start; gap: 14px; padding: 12px 16px; font-size: 13px; }
+    .rv-row + .rv-row { border-top: 1px solid var(--stroke); }
+    .rv-k { width: 96px; flex-shrink: 0; color: var(--dim); font-size: 12px; font-weight: 600; padding-top: 1px; }
+    .rv-v { flex: 1; min-width: 0; color: var(--text); line-height: 1.5; word-break: break-word; }
+    .rv-v .muted { color: var(--dim); }
+    .rv-edit { font-size: 12px; font-weight: 600; color: var(--acc); flex-shrink: 0; }
+    .rv-edit:hover { text-decoration: underline; }
+
+    .buy-box {
+      padding: 18px; border-radius: 18px;
+      background: var(--field); border: 1px solid var(--stroke-2);
+      transition: border-color .15s ease, box-shadow .15s ease;
+    }
+    .buy-box:focus-within { border-color: var(--acc-line); box-shadow: 0 0 0 3px var(--acc-soft); }
+    .buy-input { display: flex; align-items: center; gap: 10px; }
+    .buy-input .sol-mark { font-size: 28px; color: var(--acc); font-weight: 300; }
+    .buy-input input {
+      flex: 1; min-width: 0; background: transparent; border: 0; outline: none;
+      font-size: 36px; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums;
+    }
+    .buy-input input::placeholder { color: #353a42; }
+    .quick { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+    .quick button {
+      height: 30px; padding: 0 12px; border-radius: 9px;
+      font-size: 12.5px; font-weight: 700; color: var(--muted);
+      background: rgba(255, 255, 255, .04); border: 1px solid var(--stroke-2);
+      transition: color .12s ease, border-color .12s ease, background .12s ease;
+    }
+    .quick button:hover { color: var(--text); border-color: var(--acc-line); }
+    .quick button.is-active { color: var(--acc-ink); background: var(--acc-grad); border-color: transparent; }
+    .costs { border-radius: 16px; border: 1px solid var(--stroke); padding: 6px 16px; }
+    .cost-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 9px 0; font-size: 13px; color: var(--muted); }
+    .cost-row + .cost-row { border-top: 1px solid var(--stroke); }
+    .cost-row b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+    .cost-row em { font-style: normal; font-size: 11px; color: var(--up); margin-left: 6px; }
+    .cost-row.total { font-size: 14.5px; color: var(--text); font-weight: 600; }
+    .cost-row.total b { font-size: 17px; font-weight: 800; }
+    .warn-box { margin-top: 10px; padding: 10px 12px; border-radius: 12px; font-size: 12.5px; color: #fde68a; background: rgba(234, 179, 8, .08); border: 1px solid rgba(234, 179, 8, .3); }
+    .warn-box a { color: #fff; font-weight: 600; text-decoration: underline; }
+
+    /* ---------------- Wizard footer ---------------- */
+    .wiz-nav {
+      display: flex; align-items: center; gap: 12px;
+      padding: 16px 28px 22px;
+      margin-top: 18px;
+      border-top: 1px solid var(--stroke);
+    }
+    .btn-back {
+      height: 44px; padding: 0 16px; border-radius: 12px;
+      font-size: 13.5px; font-weight: 600; color: var(--muted);
+      transition: color .15s ease, background .15s ease;
+    }
+    .btn-back:hover { color: var(--text); background: rgba(255, 255, 255, .04); }
+    .nav-hint { flex: 1; min-width: 0; text-align: right; font-size: 12.5px; color: var(--dim); }
+    .nav-hint.is-err { color: #ff8a9b; }
+    .btn-acc {
+      display: inline-flex; align-items: center; gap: 8px;
+      height: 44px; padding: 0 20px; border-radius: 12px;
+      font-size: 14px; font-weight: 700; color: var(--acc-ink);
+      background: var(--acc-grad);
+      box-shadow: 0 10px 28px -12px var(--acc-glow), inset 0 1px 0 rgba(255, 255, 255, .25);
+      transition: transform .18s var(--spring), filter .15s ease, opacity .15s ease;
+      white-space: nowrap;
+    }
+    .btn-acc:hover:not(:disabled) { transform: translateY(-1px) scale(1.02); filter: brightness(1.06); }
+    .btn-acc:active:not(:disabled) { transform: scale(.98); }
+    .btn-acc:disabled { opacity: .55; cursor: not-allowed; }
+    .btn-acc .arrow { transition: transform .18s var(--spring); }
+    .btn-acc:hover .arrow { transform: translateX(3px); }
+
+    /* ---------------- Preview column ---------------- */
+    /* Pinned beside the form on desktop so the preview and the checklist stay
+       in view while the steps scroll. On a short window it scrolls inside
+       itself rather than hiding its bottom half. */
+    @media (min-width: 1024px) {
+      .pv-col {
+        position: sticky; top: 20px;
+        max-height: calc(100vh - 40px); overflow-y: auto;
+        scrollbar-width: none;
+      }
+      .pv-col::-webkit-scrollbar { display: none; }
+    }
+    .pv-card {
+      border-radius: 20px; padding: 18px;
+      background: linear-gradient(180deg, #14171c, #111317);
+      border: 1px solid var(--stroke);
+      box-shadow: 0 30px 60px -40px var(--acc-glow);
+      transition: box-shadow .5s ease;
+    }
+    .pv-eyebrow { font-size: 10.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); }
+    .pv-logo {
+      width: 56px; height: 56px; border-radius: 16px; flex-shrink: 0; overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; font-weight: 800; color: var(--acc-ink);
+      background: var(--acc-grad);
+      transition: background .4s ease;
+    }
+    .pv-logo img { width: 100%; height: 100%; object-fit: cover; }
+    .pv-name { font-size: 17px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pv-name.is-empty { color: var(--dim); }
+    .pv-sub { font-size: 12.5px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pv-type {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 9px; border-radius: 999px;
+      font-size: 11px; font-weight: 800; letter-spacing: .02em;
+      color: var(--acc-ink); background: var(--acc-grad);
+      white-space: nowrap;
+    }
+    .pv-legend { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+    .pv-legend li { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+    .pv-legend .sw { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+    .pv-legend .w { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .pv-thesis { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--stroke); font-size: 13px; color: #d5d9df; font-style: italic; line-height: 1.5; }
+    .pv-link { display: inline-flex; margin-top: 8px; font-size: 12px; font-weight: 600; color: var(--acc); }
+    .pv-empty-bar { height: 10px; border-radius: 999px; background: repeating-linear-gradient(135deg, rgba(255, 255, 255, .06) 0 6px, rgba(255, 255, 255, .02) 6px 12px); }
+
+    .check-card { margin-top: 12px; border-radius: 20px; padding: 16px 18px; background: var(--panel); border: 1px solid var(--stroke); }
+    .check-count { font-size: 11.5px; font-weight: 700; color: var(--dim); transition: color .2s ease; }
+    .check-count.is-done { color: var(--up); }
+
+    .ipo-more { font-size: 11.5px; font-weight: 600; color: var(--muted); transition: color .15s ease; }
+    .ipo-more:hover { color: var(--text); }
+    .ipo-sub { font-size: 12px; color: var(--muted); margin-top: 5px; line-height: 1.45; }
+    .ipo-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .ipo-row {
+      position: relative;
+      display: flex; align-items: center; gap: 8px; width: 100%;
+      padding: 7px 26px 7px 7px;
+      border-radius: 12px; text-align: left;
+      background: var(--field); border: 1px solid var(--stroke);
+      transition: border-color .15s ease, background .15s ease, transform .15s var(--spring);
+    }
+    .ipo-row:hover { border-color: var(--acc-line); background: rgba(255, 255, 255, .03); transform: translateY(-1px); }
+    .ipo-row img, .ipo-row .ipo-fb { width: 26px; height: 26px; border-radius: 7px; object-fit: cover; background: #fff; flex-shrink: 0; }
+    .ipo-row .ipo-fb { display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #0b0d10; }
+    .ipo-name { font-size: 12.5px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ipo-meta { font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; }
+    .ipo-add {
+      position: absolute; top: 50%; right: 7px; transform: translateY(-50%);
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 16px; height: 16px; border-radius: 999px;
+      font-size: 12px; font-weight: 700; line-height: 1; color: var(--dim);
+      transition: color .15s ease, background .15s ease;
+    }
+    .ipo-row:hover .ipo-add { color: var(--acc-ink); background: var(--acc); }
+    .ipo-row.is-added { cursor: default; border-color: rgba(34, 197, 94, .3); }
+    .ipo-row.is-added:hover { transform: none; background: var(--field); }
+    .ipo-row.is-added .ipo-add, .ipo-row.is-added:hover .ipo-add { color: #0b0d10; background: var(--up); }
+    .checks { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+    .checks li { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); transition: color .2s ease; }
+    .checks .ck {
+      width: 18px; height: 18px; border-radius: 999px; flex-shrink: 0;
+      display: inline-flex; align-items: center; justify-content: center;
+      border: 1.5px solid var(--stroke-2);
+      transition: background .25s ease, border-color .25s ease, transform .3s var(--spring);
+    }
+    .checks .ck svg { opacity: 0; transform: scale(.4); transition: opacity .2s ease, transform .3s var(--spring); }
+    .checks li.is-ok { color: var(--text); }
+    .checks li.is-ok .ck { background: var(--up); border-color: var(--up); transform: scale(1.08); }
+    .checks li.is-ok .ck svg { opacity: 1; transform: scale(1); }
+
+    /* ---------------- Remix card ---------------- */
+    .remix-card { border-radius: 18px; padding: 16px 18px; background: var(--acc-soft); border: 1px solid var(--acc-line); }
+
+    /* ---------------- Cropper ---------------- */
+    .crop-backdrop { position: fixed; inset: 0; z-index: 200; background: rgba(0, 0, 0, .8); display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .crop-panel { width: 100%; max-width: 420px; background: var(--panel); border: 1px solid var(--stroke-2); border-radius: 20px; padding: 20px; animation: slideInUp .3s var(--ease) both; }
+    .crop-stage { position: relative; width: 100%; aspect-ratio: 1; border-radius: 16px; overflow: hidden; background: #08090b; touch-action: none; cursor: grab; }
+    .crop-stage:active { cursor: grabbing; }
+    .crop-stage canvas { display: block; width: 100%; height: 100%; }
+    .crop-mask { position: absolute; inset: 0; pointer-events: none; border: 2px solid rgba(255, 255, 255, .35); border-radius: 16px; }
+    .crop-range { width: 100%; accent-color: var(--acc-strong); }
+    .btn-ghost { padding: 8px 14px; border-radius: 10px; font-size: 13px; font-weight: 600; color: var(--text); background: rgba(255, 255, 255, .04); border: 1px solid var(--stroke-2); }
+    .btn-ghost:hover { background: rgba(255, 255, 255, .08); }
+
+    /* ---------------- Deploy overlay ---------------- */
+    .deploy-overlay {
+      position: fixed; inset: 0; z-index: 70;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(6, 7, 9, .86);
+      backdrop-filter: blur(8px);
+      opacity: 0; pointer-events: none;
+      transition: opacity .25s ease;
+    }
+    .deploy-overlay.active { opacity: 1; pointer-events: auto; }
+    .deploy-card { width: 100%; max-width: 440px; margin: 0 16px; border-radius: 22px; background: var(--panel); border: 1px solid var(--stroke-2); box-shadow: 0 40px 80px -30px var(--acc-glow); overflow: hidden; }
+    .deploy-step { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; opacity: .38; transition: opacity .3s ease; }
+    .deploy-step.active, .deploy-step.done { opacity: 1; }
+    .deploy-dot { width: 20px; height: 20px; border-radius: 999px; border: 2px solid var(--stroke-2); flex-shrink: 0; margin-top: 1px; display: flex; align-items: center; justify-content: center; transition: all .3s ease; }
+    .deploy-step.active .deploy-dot { border-color: var(--acc); box-shadow: 0 0 0 4px var(--acc-soft); }
+    .deploy-step.done .deploy-dot { border-color: var(--up); background: var(--up); }
+    .deploy-step.done .deploy-dot::after { content: ''; width: 5px; height: 9px; border: solid #0b0d10; border-width: 0 2px 2px 0; transform: rotate(45deg) translate(-1px, -1px); }
+    .deploy-spinner { display: none; width: 9px; height: 9px; border: 2px solid transparent; border-top-color: var(--acc); border-radius: 50%; animation: spin .7s linear infinite; }
+    .deploy-step.active .deploy-spinner { display: block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .mirror-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 10px; border-radius: 9px; background: var(--field); font-size: 12px; animation: rowIn .3s var(--ease) both; }
+
+    @media (max-width: 640px) {
+      .panel { padding: 20px 16px 6px; }
+      .wiz-nav { padding: 14px 16px 18px; }
+      .type-grid { grid-template-columns: 1fr; }
+      .st-l { display: none; }
+      .st { justify-content: center; }
+      .tk-step { display: none; }
+    }
+    /* Reduced motion keeps the page alive but still: every slide becomes a
+       fade (no travel), shaking stops. Opacity changes, the loading shimmer
+       and the small pulse on the allocation total stay -- they carry meaning
+       and do not move anything across the screen. */
+    @keyframes fadeOnly { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes fadeAway { to { opacity: 0; } }
+    @media (prefers-reduced-motion: reduce) {
+      .panel.out-left, .panel.out-right, .panel.in-right, .panel.in-left { transform: none; }
+      .reveal-in, .row-enter, .dur-box, .results, .mirror-row, .crop-panel { animation-name: fadeOnly; }
+      .row-exit { animation-name: fadeAway; }
+      .shake { animation: none; }
+      .type-card:hover:not(:disabled), .btn-acc:hover:not(:disabled), .sug:hover, .chip-suggest:hover { transform: none; }
+    }
+  </style>
+</head>
+
+<body data-type="<%= startMode %>">
+  <%- include('partials/appnav', { user: user, active: 'create' }) %>
+
+  <div class="relative">
+
+    <main class="relative max-w-[1180px] mx-auto px-4 sm:px-6 pt-8 pb-24">
+
+      <header class="mb-6">
+        <h1 class="text-[30px] font-bold tracking-tight" id="pageTitle">
+          <%= pf ? 'Remix ' + pf.parent.name : (startMode === 'meme' ? 'Launch a meme mixer' : 'Create a mixer') %>
+        </h1>
+        <p class="text-[13.5px] text-[var(--muted)] mt-1">
+          A basket of real tokens, deployed on Solana devnet in about a minute.
+        </p>
+      </header>
+
+      <% if (pf) { %>
+
+        <div class="remix-card mb-6">
+          <div class="flex items-start gap-4">
+            <% if (pf.parent.image) { %>
+              <img src="<%= pf.parent.image %>" alt="" class="w-11 h-11 rounded-xl object-cover border border-white/10 shrink-0" onerror="this.style.display='none'">
+            <% } %>
+            <div class="min-w-0 flex-1">
+              <p class="text-[13px]">
+                Remixing <a href="/mixer/<%= pf.parent.mixer_id %>" class="font-semibold text-white hover:underline"><%= pf.parent.name %></a>
+                <% if (pf.parent.creatorHandle) { %><span class="text-[var(--muted)]">by @<%= pf.parent.creatorHandle %></span><% } %>
+              </p>
+              <% if (pf.parent.thesis_title || pf.parent.thesis) { %>
+                <details class="mt-2">
+                  <summary class="text-[12px] font-semibold text-[var(--acc)] cursor-pointer select-none">Their thesis</summary>
+                  <div class="mt-2 p-3 rounded-xl bg-black/30 border border-white/5">
+                    <% if (pf.parent.thesis_title) { %><p class="text-[13px] font-semibold text-gray-200"><%= pf.parent.thesis_title %></p><% } %>
+                    <% if (pf.parent.thesis) { %><p class="text-[12.5px] text-gray-400 mt-1 leading-relaxed whitespace-pre-line"><%= pf.parent.thesis %></p><% } %>
+                  </div>
+                </details>
+              <% } %>
+              <p class="text-[12px] text-[var(--muted)] mt-2 leading-relaxed">
+                This creates a new, fully independent mixer with its own vault and investors.
+                The original is not changed, and its creator has not endorsed this remix.
+              </p>
+            </div>
+          </div>
+        </div>
+      <% } %>
+
+      <input type="hidden" id="parent-mixer-id" value="<%= pf ? pf.parent.mixer_id : '' %>">
+      <input type="hidden" id="mixer-duration" value="">
+      <input type="hidden" id="mixer-category" value="">
+
+      <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start">
+
+        <section class="wizard" aria-label="Create a mixer">
+          <div class="px-4 sm:px-5 pt-4">
+            <ol class="stepper" id="stepper">
+              <li class="st is-active" data-go="1" role="button" tabindex="0" aria-label="Step 1: Basics"><span class="st-n">1</span><span class="st-l">Basics</span></li>
+              <li class="st" data-go="2" role="button" tabindex="0" aria-label="Step 2: Mixer Details"><span class="st-n">2</span><span class="st-l">Mixer Details</span></li>
+              <li class="st" data-go="3" role="button" tabindex="0" aria-label="Step 3: Thesis"><span class="st-n">3</span><span class="st-l">Thesis</span></li>
+              <li class="st" data-go="4" role="button" tabindex="0" aria-label="Step 4: Launch"><span class="st-n">4</span><span class="st-l">Launch</span></li>
+            </ol>
+          </div>
+
+          <div id="panels">
+
+            <div class="panel" data-panel="1">
+              <div class="reveal">
+                <p class="sec-k">What are you making?</p>
+                <div class="type-grid" role="radiogroup" aria-label="Mixer type">
+                  <button type="button" class="type-card <%= startMode === 'mixer' ? 'is-active' : '' %>" data-type="mixer" role="radio"
+                          aria-checked="<%= startMode === 'mixer' %>" <%= pf && startMode !== 'mixer' ? 'disabled' : '' %>>
+                    <span class="t-radio" aria-hidden="true"></span>
+                    <span class="t-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 3 7.5l9 4.5 9-4.5L12 3Z"/><path d="m3 12 9 4.5 9-4.5"/><path d="m3 16.5 9 4.5 9-4.5"/></svg></span>
+                    <span class="t-title">Mixer</span>
+                    <span class="t-desc">A long-term basket. Runs until you close it &mdash; built to hold.</span>
+                    <span class="t-tag">Listed on Markets</span>
+                  </button>
+                  <button type="button" class="type-card <%= startMode === 'meme' ? 'is-active' : '' %>" data-type="meme" role="radio"
+                          aria-checked="<%= startMode === 'meme' %>" <%= pf && startMode !== 'meme' ? 'disabled' : '' %>>
+                    <span class="t-radio" aria-hidden="true"></span>
+                    <span class="t-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5Z"/></svg></span>
+                    <span class="t-title">Meme mixer</span>
+                    <span class="t-desc">A short-lived run on a clock. When it hits zero, it sells and pays everyone out.</span>
+                    <span class="t-tag">Listed on Meme</span>
+                  </button>
+                </div>
+                <% if (pf) { %>
+                  <p class="field-hint">A remix keeps the original's type.</p>
+                <% } %>
+
+                <div class="dur-box" id="durationBox" <%= startMode === 'meme' ? '' : 'hidden' %>>
+                  <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                    <p class="text-[13px] font-semibold">How long does it run?</p>
+                    <p class="dur-end num" id="durEnd"></p>
+                  </div>
+                  <div class="dur-groups" role="group" aria-label="Run length">
+                    <% UNITS.forEach(function (u) {
+                         var opts = durs.filter(function (d) { return d.unit === u[0]; });
+                         if (!opts.length) return; %>
+                      <div>
+                        <span class="dur-unit"><%= u[1] %></span>
+                        <div class="dur-opts">
+                          <% opts.forEach(function (d) { %>
+                            <button type="button" class="dur-opt duration-option" data-ms="<%= d.ms %>" title="<%= d.label %>" aria-pressed="false"><%= d.short %></button>
+                          <% }) %>
+                        </div>
+                      </div>
+                    <% }) %>
+                  </div>
+                  <p class="dur-note">
+                    At the deadline every holder is sold out at whatever the basket is worth then &mdash;
+                    a normal sell, so the usual trading fee applies. Buying stops when the clock hits zero.
+                  </p>
+                </div>
+              </div>
+
+              <div class="reveal field">
+                <div class="flex items-start gap-5">
+                  <div class="flex flex-col items-center gap-2">
+                    <div id="logo-preview-wrap" class="logo-drop" tabindex="0" role="button" aria-label="Upload a logo">
+                      <img id="logo-preview" alt="" hidden>
+                      <span id="logo-placeholder" class="logo-placeholder">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>
+                        </svg>
+                        Logo
+                      </span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <button type="button" class="link-btn" id="logo-url-toggle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Link</button>
+                      <button type="button" class="link-btn" id="logo-clear-btn" hidden><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/></svg>Remove</button>
+                    </div>
+                  </div>
+
+                  <div class="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-[1fr_170px] gap-3">
+                    <div>
+                      <label class="lbl" for="mixer-name">Name <span class="cnt" id="nameCnt">0/64</span></label>
+                      <input type="text" id="mixer-name" class="inp inp-lg" maxlength="64" autocomplete="off"
+                             placeholder="<%= startMode === 'meme' ? 'Dog Party' : 'Solana Bluechips' %>">
+                    </div>
+                    <div>
+                      <label class="lbl" for="mixer-ticker">Ticker <span class="cnt" id="tickerCnt">0/10</span></label>
+                      <div class="prefix-wrap">
+                        <span class="prefix">$</span>
+                        <input type="text" id="mixer-ticker" class="inp inp-lg inp-ticker" maxlength="10" autocomplete="off" placeholder="TICKER">
+                      </div>
+                      <button type="button" class="chip-suggest" id="tickerSuggest" hidden></button>
+                    </div>
+                    <div class="sm:col-span-2" id="logoUrlRow" hidden>
+                      <input type="text" id="mixer-logo" class="inp" autocomplete="off" placeholder="https://… image link">
+                    </div>
+                    <p class="sm:col-span-2 field-hint" id="logo-hint" style="margin-top:0">Drop an image on the square, or click it. PNG, JPG or GIF &mdash; square works best.</p>
+                    <input type="file" id="logo-file" accept="image/*" hidden>
+                  </div>
+                </div>
+              </div>
+
+              <div class="reveal field">
+                <label class="lbl" for="mixer-description">Description <span><span class="opt">Optional</span> · <span class="cnt" id="descCnt">0/500</span></span></label>
+                <textarea id="mixer-description" class="ta" rows="3" maxlength="500"
+                          placeholder="<%= startMode === 'meme' ? 'What is this run about?' : 'What is in the basket, in a sentence or two?' %>"></textarea>
+              </div>
+
+              <div class="reveal field" id="categoryBox" <%= startMode === 'meme' ? 'hidden' : '' %>>
+                <label class="lbl">Category <span class="opt">Optional · helps people find it on Markets</span></label>
+                <div class="cat-grid">
+                  <% cats.forEach(function (c) { %>
+                    <button type="button" class="category-option" data-category="<%= c.id %>" title="<%= c.description %>" aria-pressed="false">
+                      <span class="c-ico"><%- catIcon(c.id) %></span><%= c.label %>
+                    </button>
+                  <% }) %>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel" data-panel="2" hidden>
+              <div class="reveal det-head">
+                <div>
+                  <h2 class="h2">Mixer Details</h2>
+                  <p class="sub">Pick up to 10 tokens and decide how much of the basket each one gets.</p>
+                </div>
+                <div class="alloc-total" aria-live="polite">
+                  <span class="alloc-k">Total allocation</span>
+                  <span id="allocation-display" class="alloc-v num"><span data-v>0%</span> <span class="of">/ 100%</span></span>
+                </div>
+              </div>
+
+              <div class="reveal field" style="margin-top:14px">
+                <div class="alloc-bar" id="allocBar" aria-hidden="true"></div>
+              </div>
+
+              <div class="reveal field field-search">
+                <div class="search" id="searchWrap">
+                  <svg class="search-ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+                  <input type="text" id="token-search" class="inp" autocomplete="off" spellcheck="false"
+                         placeholder="Search by name or ticker, or paste a mint"
+                         role="combobox" aria-expanded="false" aria-controls="searchResults" aria-autocomplete="list">
+                  <span class="search-spin" id="searchSpin" hidden></span>
+                  <div class="results" id="searchResults" role="listbox" hidden></div>
+                </div>
+              </div>
+
+              <div class="reveal field" style="margin-top:12px">
+                <div class="suggest" id="suggest"></div>
+              </div>
+
+              <div class="reveal field">
+                <div class="basket" id="added"></div>
+                <div class="basket-empty" id="basketEmpty">
+                  <span class="be-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 3 7.5l9 4.5 9-4.5L12 3Z"/><path d="m3 12 9 4.5 9-4.5"/><path d="m3 16.5 9 4.5 9-4.5"/></svg></span>
+                  <p class="be-t">Your basket is empty</p>
+                  <p class="be-s">Search above, tap a suggestion, or add a Pre-IPO stock. A mixer needs at least 2 tokens.</p>
+                </div>
+              </div>
+
+              <div class="reveal field">
+                <div class="tools">
+                  <button type="button" class="btn-tool" id="splitBtn" disabled>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3v18M5 8l-3 4 3 4M19 8l3 4-3 4"/></svg>
+                    Split evenly
+                  </button>
+                  <span class="remain num" id="remainHint">Add a token to start</span>
+                  <span class="ml-auto num" id="tokenCount">0 / 10 tokens</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel" data-panel="3" hidden>
+              <div class="reveal">
+                <h2 class="h2">Your thesis</h2>
+                <p class="sub">The claim this basket makes. Optional &mdash; but it's what people agree or disagree with, and it shows on the mixer's page.</p>
+              </div>
+
+              <div class="reveal field">
+                <label class="lbl" for="mixer-thesis-title">Headline <span class="cnt" id="ttCnt">0/120</span></label>
+                <input type="text" id="mixer-thesis-title" class="inp inp-lg" maxlength="120" autocomplete="off"
+                       placeholder="<%= startMode === 'meme' ? 'Dog coins run this weekend' : 'AI will be dominated by frontier models' %>">
+              </div>
+
+              <div class="reveal field">
+                <label class="lbl" for="mixer-thesis">The argument <span class="cnt" id="thCnt">0/5000</span></label>
+                <textarea id="mixer-thesis" class="ta" rows="5" maxlength="5000"
+                          placeholder="Why this basket? What has to be true for it to work?"></textarea>
+              </div>
+
+              <div class="reveal field">
+                <label class="lbl" for="mixer-website">Link <span class="opt">Optional</span></label>
+                <div class="prefix-wrap">
+                  <svg class="prefix" style="left:12px" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                  <input type="text" id="mixer-website" class="inp" style="padding-left:34px" maxlength="300" autocomplete="off" spellcheck="false"
+                         placeholder="mirror.xyz/you/why-this-basket">
+                </div>
+                <p class="field-hint" id="websiteHint">A post, doc or site with more about your thesis. Shown as a link on the mixer's page.</p>
+                <p class="field-err" id="websiteErr" hidden></p>
+                <span class="link-chip" id="websiteChip" hidden></span>
+              </div>
+
+              <% if (pf) { %>
+
+                <div class="reveal field" id="counter-thesis-block">
+                  <label class="lbl" for="mixer-counter-thesis" style="color:var(--acc)">Why you disagree <span class="cnt" id="ctCnt">0/2000</span></label>
+                  <textarea id="mixer-counter-thesis" class="ta" rows="4" maxlength="2000"
+                            placeholder="What <%= pf.parent.name %> gets wrong, and what you'd do instead."></textarea>
+                  <p class="field-hint">Shown beside the original thesis when people compare the two.</p>
+                </div>
+              <% } %>
+            </div>
+
+            <div class="panel" data-panel="4" hidden>
+              <div class="reveal">
+                <h2 class="h2">Review &amp; launch</h2>
+                <p class="sub">A mixer can't be edited once it's live, so give it a once-over.</p>
+              </div>
+
+              <div class="reveal field">
+                <div class="review" id="review"></div>
+              </div>
+
+              <div class="reveal field">
+                <label class="lbl" for="initial-investment">Opening buy <span class="opt" id="walletBal">Wallet: …</span></label>
+                <div class="buy-box">
+                  <div class="buy-input">
+                    <span class="sol-mark">◎</span>
+                    <input type="text" id="initial-investment" inputmode="decimal" autocomplete="off" placeholder="0.25" aria-describedby="buyHint">
+                    <span class="text-[14px] font-semibold text-[var(--muted)]">SOL</span>
+                  </div>
+                  <div class="quick" id="quick">
+                    <button type="button" data-amt="0.1">0.1</button>
+                    <button type="button" data-amt="0.25">0.25</button>
+                    <button type="button" data-amt="0.5">0.5</button>
+                    <button type="button" data-amt="1">1</button>
+                    <button type="button" data-amt="max" id="max-btn">MAX</button>
+                  </div>
+                  <p class="field-hint" id="buyHint">Bought for you right after deploy, so the mixer launches with a holder. Minimum 0.1 SOL.</p>
+                </div>
+                <div class="warn-box" id="buyWarn" hidden></div>
+              </div>
+
+              <div class="reveal field">
+                <div class="costs">
+                  <div class="cost-row"><span>Opening buy</span><b id="costBuy">0 SOL</b></div>
+                  <div class="cost-row"><span>Deploy <span class="text-[var(--dim)]" id="costAccounts"></span></span><b id="costRent">—</b></div>
+                  <div class="cost-row"><span>Account deposits <span class="text-[var(--dim)]">· opening buy</span></span><b id="costFirstBuy">—</b></div>
+                  <div class="cost-row total"><span>From your wallet</span><b id="total-required">0 SOL</b></div>
+                  <p class="field-hint" style="margin-top:8px">Deploying creates the mixer's on-chain accounts. Their rent and network fees come from your wallet, taken just before deploying and refunded if the deploy fails.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="wiz-nav">
+            <button type="button" class="btn-back" id="backBtn" hidden>&larr; Back</button>
+            <p class="nav-hint" id="navHint" aria-live="polite"></p>
+            <button type="button" class="btn-acc" id="nextBtn">Continue <span class="arrow">&rarr;</span></button>
+            <button type="button" class="btn-acc" id="launch-btn" hidden>
+              <span id="launchLabel"><%= startMode === 'meme' ? 'Launch meme mixer' : 'Launch mixer' %></span>
+            </button>
+          </div>
+        </section>
+
+        <aside class="pv-col" aria-label="Preview">
+          <div class="pv-card">
+            <div class="flex items-center justify-between mb-3">
+              <span class="pv-eyebrow">Preview</span>
+              <span class="pv-type" id="pvType"></span>
+            </div>
+            <div class="flex items-center gap-3">
+              <div class="pv-logo" id="pvLogo">M</div>
+              <div class="min-w-0">
+                <p class="pv-name is-empty" id="pvName">Untitled mixer</p>
+                <p class="pv-sub"><span id="pvTicker">$TICKER</span> · by <%= handle %></p>
+              </div>
+            </div>
+            <div class="mt-4">
+              <div class="alloc-bar" id="pvBar"></div>
+              <ul class="pv-legend" id="pvLegend"></ul>
+            </div>
+            <p class="pv-thesis" id="pvThesis" hidden></p>
+            <a class="pv-link" id="pvLink" target="_blank" rel="noopener noreferrer nofollow" hidden></a>
+          </div>
+
+          <div class="check-card ipo-card" id="ipoCard" hidden>
+            <div class="flex items-center justify-between">
+              <span class="pv-eyebrow">Add a Pre-IPO layer</span>
+              <a href="/stocks" class="ipo-more">All stocks &rarr;</a>
+            </div>
+            <p class="ipo-sub">Tokenised shares of private companies, priced live.</p>
+            <ul class="ipo-list" id="ipoList"></ul>
+          </div>
+
+          <div class="check-card">
+            <div class="flex items-center justify-between">
+              <span class="pv-eyebrow">Ready to launch</span>
+              <span class="check-count num" id="checkCount"></span>
+            </div>
+            <ul class="checks" id="checks">
+              <li data-check="name"><span class="ck"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0b0d10" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg></span>Name</li>
+              <li data-check="ticker"><span class="ck"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0b0d10" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg></span>Ticker</li>
+              <li data-check="duration"><span class="ck"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0b0d10" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg></span>Clock set</li>
+              <li data-check="tokens"><span class="ck"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0b0d10" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg></span>At least 2 tokens</li>
+              <li data-check="weights"><span class="ck"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0b0d10" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg></span>Weights add up to 100%</li>
+              <li data-check="buy"><span class="ck"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0b0d10" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg></span>Opening buy of 0.1 SOL or more</li>
+            </ul>
+          </div>
+          <p class="text-[11.5px] text-[var(--dim)] mt-3 px-1 leading-relaxed">
+            Prices and token details come from the real tokens you pick. The vaults hold matching devnet tokens, so trades settle on devnet.
+          </p>
+        </aside>
+      </div>
+    </main>
+  </div>
+
+  <div id="crop-backdrop" class="crop-backdrop" hidden>
+    <div class="crop-panel" role="dialog" aria-modal="true" aria-labelledby="cropTitle">
+      <h3 id="cropTitle" class="text-[15px] font-bold">Crop your logo</h3>
+      <p class="text-[12px] text-[var(--muted)] mt-0.5 mb-4">Drag to move, slide to zoom.</p>
+      <div id="crop-stage" class="crop-stage">
+        <canvas id="crop-canvas"></canvas>
+        <div class="crop-mask"></div>
+      </div>
+      <div class="flex items-center gap-3 mt-4">
+        <span class="text-[11px] text-[var(--muted)]">Zoom</span>
+        <input id="crop-zoom" type="range" min="100" max="300" value="100" class="crop-range">
+      </div>
+      <div class="flex items-center justify-end gap-2 mt-5">
+        <button type="button" id="crop-cancel" class="btn-ghost">Cancel</button>
+        <button type="button" id="crop-apply" class="btn-acc" style="height:36px;padding:0 16px;font-size:13px">Use this</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="deploy-overlay" class="deploy-overlay" role="dialog" aria-modal="true" aria-labelledby="deployTitle">
+    <div class="deploy-card">
+      <div class="px-6 pt-6 pb-4 border-b border-[var(--stroke)] flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style="background:var(--acc-soft)">
+          <svg class="w-4 h-4" style="color:var(--acc)" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        </div>
+        <div>
+          <h3 id="deployTitle" class="text-[15px] font-bold leading-tight">Deploying your mixer</h3>
+          <p class="text-[12px] text-[var(--muted)] mt-0.5">Building vaults on Solana devnet</p>
+        </div>
+      </div>
+      <div class="px-6 py-4">
+        <div class="deploy-step" data-step="prepare">
+          <div class="deploy-dot"><div class="deploy-spinner"></div></div>
+          <div class="flex-1 min-w-0"><p class="text-[13.5px] font-semibold">Pricing and paying</p><p class="text-[12px] text-[var(--muted)] mt-0.5">Live prices for your basket, then the deploy cost from your wallet</p></div>
+        </div>
+        <div class="deploy-step" data-step="mirror">
+          <div class="deploy-dot"><div class="deploy-spinner"></div></div>
+          <div class="flex-1 min-w-0">
+            <p class="text-[13.5px] font-semibold">Creating devnet tokens</p>
+            <p class="text-[12px] text-[var(--muted)] mt-0.5">Minting devnet stand-ins that track your real tokens</p>
+            <div id="mirror-list" class="mt-2 space-y-1.5"></div>
+          </div>
+        </div>
+        <div class="deploy-step" data-step="vaults">
+          <div class="deploy-dot"><div class="deploy-spinner"></div></div>
+          <div class="flex-1 min-w-0"><p class="text-[13.5px] font-semibold">Deploying vaults</p><p class="text-[12px] text-[var(--muted)] mt-0.5">One on-chain vault per token, then finalise</p></div>
+        </div>
+        <div class="deploy-step" data-step="buy">
+          <div class="deploy-dot"><div class="deploy-spinner"></div></div>
+          <div class="flex-1 min-w-0"><p class="text-[13.5px] font-semibold">Opening buy</p><p id="deploy-buy-sub" class="text-[12px] text-[var(--muted)] mt-0.5">Seeding the mixer with your first purchase</p></div>
+        </div>
+        <div class="deploy-step" data-step="done">
+          <div class="deploy-dot"><div class="deploy-spinner"></div></div>
+          <div class="flex-1 min-w-0"><p class="text-[13.5px] font-semibold">Mixer live</p><p id="deploy-done-sub" class="text-[12px] text-[var(--muted)] mt-0.5">Taking you to your mixer</p></div>
+        </div>
+      </div>
+      <div class="px-6 pb-5">
+        <p id="deploy-error" class="hidden text-[12.5px] text-[#ff8a9b]"></p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+
+    const PREFILL = <%- pf ? JSON.stringify(pf).replace(/</g, '\\u003c') : 'null' %>;
+    const BOOT = <%- JSON.stringify({
+      mode: startMode,
+      suggestions: sugg,
+      durations: durs.map(function (d) { return { ms: d.ms, label: d.label, short: d.short }; }),
+    }).replace(/</g, '\\u003c') %>;
+  </script>
+  <script src="/js/alerts.js"></script>
+  <script>
+  (function () {
+    'use strict';
+
+    const $ = (s, r) => (r || document).querySelector(s);
+    const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    const PALETTE = ['#8b6ff0', '#c98500', '#d55181', '#3987e5', '#d95926', '#199e70'];
+    const OTHER = '#5b616b';
+    const MAX_TOKENS = 10;
+
+    const MIN_TOKENS = 2;
+    const MIN_BUY = 0.1;
+    const BASE58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+
+    const S = {
+      type: BOOT.mode,
+      durationMs: '',
+      lastDuration: '',
+      basket: [],
+      step: 1,
+      maxStep: 1,
+      weightsTouched: false,
+      tickerTouched: false,
+      cost: { count: -1, state: 'idle' },
+      balance: null,
+      busy: false,
+      launching: false,
+    };
+
+    function toast(kind, msg, detail) {
+      if (window.Alerts && window.Alerts[kind]) window.Alerts[kind](msg, detail ? { detail: detail } : {});
+    }
+    const fmtW = (n) => (Math.round(Number(n) * 10) / 10).toFixed(1).replace(/\.0$/, '');
+    const shortAddr = (a) => a.slice(0, 4) + '…' + a.slice(-4);
+    const total = () => Math.round(S.basket.reduce((s, t) => s + (Number(t.weight) || 0), 0) * 10) / 10;
+    const colorOf = (t) => (t.slot >= 0 ? PALETTE[t.slot] : OTHER);
+    const val = (id) => { const e = document.getElementById(id); return e ? e.value.trim() : ''; };
+    function fmtCap(v) {
+      const n = Number(v);
+      if (!isFinite(n) || n <= 0) return null;
+      if (n >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
+      if (n >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M';
+      if (n >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K';
+      return '$' + n.toFixed(0);
+    }
+
+    function logoFor(t) { return '/images/tokens/' + encodeURIComponent(t.address); }
+    function imgWithFallback(src, cls, letter) {
+      const img = document.createElement('img');
+      img.className = cls; img.alt = ''; img.loading = 'lazy';
+      img.referrerPolicy = 'no-referrer';
+      img.src = src;
+      img.onerror = function () {
+        const fb = document.createElement('span');
+        fb.className = cls + ' ' + (cls.indexOf('tk-logo') === 0 ? 'tk-logo-fb' : cls.indexOf('ipo') === 0 ? 'ipo-fb' : 'sug-fb');
+        fb.textContent = (letter || '?').charAt(0).toUpperCase();
+        img.replaceWith(fb);
+      };
+      return img;
+    }
+
+    function setType(t) {
+      if (t !== 'mixer' && t !== 'meme') return;
+      S.type = t;
+      document.body.dataset.type = t;
+      $$('.type-card').forEach(function (c) {
+        const on = c.dataset.type === t;
+        c.classList.toggle('is-active', on);
+        c.setAttribute('aria-checked', on ? 'true' : 'false');
+      });
+      $('#durationBox').hidden = t !== 'meme';
+      $('#categoryBox').hidden = t === 'meme';
+      if (t === 'meme') {
+        setDuration(S.lastDuration || defaultDuration(), true);
+      } else {
+        S.durationMs = '';
+        $('#mixer-duration').value = '';
+        paintDurations();
+      }
+      if (!PREFILL) $('#pageTitle').textContent = t === 'meme' ? 'Launch a meme mixer' : 'Create a mixer';
+      $('#launchLabel').textContent = t === 'meme' ? 'Launch meme mixer' : 'Launch mixer';
+      renderSuggestions();
+      refresh();
+    }
+
+    function defaultDuration() {
+
+      const inherit = PREFILL && PREFILL.parent && PREFILL.parent.duration_ms;
+      const ok = (ms) => BOOT.durations.some((d) => String(d.ms) === String(ms));
+      if (inherit && ok(inherit)) return String(inherit);
+      const hour = BOOT.durations.find((d) => d.ms === 3600000);
+      return String((hour || BOOT.durations[0] || { ms: '' }).ms);
+    }
+
+    function setDuration(ms, quiet) {
+      S.durationMs = String(ms);
+      S.lastDuration = S.durationMs;
+      $('#mixer-duration').value = S.durationMs;
+      paintDurations();
+      paintDurEnd();
+      if (!quiet) refresh();
+    }
+    function paintDurations() {
+      $$('.dur-opt').forEach(function (b) {
+        const on = b.dataset.ms === S.durationMs;
+        b.classList.toggle('is-active', on);
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+    }
+    function paintDurEnd() {
+      const el = $('#durEnd');
+      if (!el) return;
+      if (!S.durationMs) { el.textContent = ''; return; }
+      const end = new Date(Date.now() + Number(S.durationMs));
+      const time = end.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      const today = end.toDateString() === new Date().toDateString();
+      el.textContent = 'Ends around ' + (today ? time : end.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' }) + ', ' + time) + ' if launched now';
+    }
+    function durationLabel() {
+      const d = BOOT.durations.find((x) => String(x.ms) === S.durationMs);
+      return d ? d.short : '';
+    }
+
+    $$('.type-card').forEach(function (c) {
+      c.addEventListener('click', function () { if (!c.disabled) setType(c.dataset.type); });
+    });
+    $$('.dur-opt').forEach(function (b) {
+      b.addEventListener('click', function () { setDuration(b.dataset.ms); });
+    });
+    setInterval(paintDurEnd, 30000);
+
+    const nameEl = $('#mixer-name');
+    const tickerEl = $('#mixer-ticker');
+    const descEl = $('#mixer-description');
+
+    function counter(input, out, max) {
+      const n = input.value.length;
+      out.textContent = n + '/' + max;
+      out.classList.toggle('is-near', n > max * 0.9);
+    }
+    function deriveTicker(name) {
+      const words = name.toUpperCase().replace(/[^A-Z0-9 ]/g, ' ').trim().split(/\s+/).filter(Boolean);
+      if (!words.length) return '';
+      if (words.length >= 3) return words.map((w) => w[0]).join('').slice(0, 6);
+      if (words.length === 2) return (words[0].slice(0, 3) + words[1].slice(0, 2)).slice(0, 6);
+      return words[0].slice(0, 5);
+    }
+    function paintTickerSuggest() {
+      const chip = $('#tickerSuggest');
+      const guess = deriveTicker(nameEl.value);
+      if (!tickerEl.value && guess) {
+        chip.textContent = 'Use $' + guess;
+        chip.dataset.v = guess;
+        chip.hidden = false;
+      } else {
+        chip.hidden = true;
+      }
+    }
+    nameEl.addEventListener('input', function () {
+      counter(nameEl, $('#nameCnt'), 64);
+      nameEl.classList.remove('is-invalid');
+      paintTickerSuggest();
+      refresh();
+    });
+    tickerEl.addEventListener('input', function () {
+      const clean = tickerEl.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
+      if (clean !== tickerEl.value) tickerEl.value = clean;
+      S.tickerTouched = true;
+      tickerEl.classList.remove('is-invalid');
+      counter(tickerEl, $('#tickerCnt'), 10);
+      paintTickerSuggest();
+      refresh();
+    });
+    $('#tickerSuggest').addEventListener('click', function () {
+      tickerEl.value = this.dataset.v || '';
+      tickerEl.dispatchEvent(new Event('input'));
+      tickerEl.focus();
+    });
+    descEl.addEventListener('input', function () { counter(descEl, $('#descCnt'), 500); });
+
+    (function bindCategoryPicker() {
+      const hidden = $('#mixer-category');
+      const options = $$('.category-option');
+      function paint() {
+        options.forEach(function (b) {
+          const on = b.dataset.category === hidden.value;
+          b.classList.toggle('is-active', on);
+          b.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+      }
+
+      options.forEach(function (b) {
+        b.addEventListener('click', function () {
+          hidden.value = hidden.value === b.dataset.category ? '' : b.dataset.category;
+          paint();
+          refresh();
+        });
+      });
+      paint();
+      S.paintCategories = paint;
+    })();
+
+    (function bindLogoUpload() {
+      const fileInput = $('#logo-file');
+      const clearBtn = $('#logo-clear-btn');
+      const drop = $('#logo-preview-wrap');
+      const preview = $('#logo-preview');
+      const placeholder = $('#logo-placeholder');
+      const urlInput = $('#mixer-logo');
+      const hint = $('#logo-hint');
+      const HINT = hint.textContent;
+      const OUT = 256;
+
+      function showPreview(src) {
+        if (src) {
+          preview.src = src;
+          preview.hidden = false;
+          placeholder.hidden = true;
+          clearBtn.hidden = false;
+        } else {
+          preview.removeAttribute('src');
+          preview.hidden = true;
+          placeholder.hidden = false;
+          clearBtn.hidden = true;
+        }
+        paintPreviewLogo();
+      }
+      S.showLogo = showPreview;
+
+      $('#logo-url-toggle').addEventListener('click', function () {
+        const row = $('#logoUrlRow');
+        row.hidden = !row.hidden;
+        this.classList.toggle('is-on', !row.hidden);
+        if (!row.hidden) urlInput.focus();
+      });
+
+      urlInput.addEventListener('input', function () {
+        const v = urlInput.value.trim();
+        if (!v) { showPreview(null); hint.textContent = HINT; return; }
+        preview.onerror = function () { showPreview(null); hint.textContent = 'That link could not be loaded as an image.'; };
+        preview.onload = function () { hint.textContent = 'Looks good.'; paintPreviewLogo(); };
+        showPreview(v);
+      });
+
+      drop.addEventListener('click', function () { fileInput.click(); });
+      drop.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); }
+      });
+      clearBtn.addEventListener('click', function () {
+        urlInput.value = '';
+        fileInput.value = '';
+        showPreview(null);
+        hint.textContent = HINT;
+      });
+      ['dragenter', 'dragover'].forEach(function (ev) {
+        drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('is-dragover'); });
+      });
+      ['dragleave', 'drop'].forEach(function (ev) {
+        drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('is-dragover'); });
+      });
+      drop.addEventListener('drop', function (e) {
+        const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        if (f) handleFile(f);
+      });
+      fileInput.addEventListener('change', function () {
+        if (fileInput.files && fileInput.files[0]) handleFile(fileInput.files[0]);
+      });
+
+      function handleFile(file) {
+        if (!file.type || file.type.indexOf('image/') !== 0) { hint.textContent = 'That file is not an image.'; return; }
+
+        if (file.size > 12 * 1024 * 1024) { hint.textContent = 'That image is too large (max 12MB).'; return; }
+        const reader = new FileReader();
+        reader.onload = function () { openCropper(String(reader.result)); };
+        reader.onerror = function () { hint.textContent = 'That image could not be read.'; };
+        reader.readAsDataURL(file);
+      }
+
+      function openCropper(dataUrl) {
+        const backdrop = $('#crop-backdrop');
+        const canvas = $('#crop-canvas');
+        const stage = $('#crop-stage');
+        const zoom = $('#crop-zoom');
+        const img = new Image();
+        img.onload = function () {
+          const ctx = canvas.getContext('2d');
+          const size = OUT;
+          canvas.width = size;
+          canvas.height = size;
+
+          const baseScale = Math.max(size / img.width, size / img.height);
+          let scale = 1, offX = 0, offY = 0;
+
+          function clamp() {
+            const w = img.width * baseScale * scale, h = img.height * baseScale * scale;
+            const maxX = Math.max(0, (w - size) / 2), maxY = Math.max(0, (h - size) / 2);
+            offX = Math.min(maxX, Math.max(-maxX, offX));
+            offY = Math.min(maxY, Math.max(-maxY, offY));
+          }
+          function draw() {
+            clamp();
+            const w = img.width * baseScale * scale, h = img.height * baseScale * scale;
+            ctx.clearRect(0, 0, size, size);
+            ctx.fillStyle = '#08090b';
+            ctx.fillRect(0, 0, size, size);
+            ctx.drawImage(img, (size - w) / 2 + offX, (size - h) / 2 + offY, w, h);
+          }
+          zoom.value = '100';
+          zoom.oninput = function () { scale = Number(zoom.value) / 100; draw(); };
+
+          let dragging = false, lastX = 0, lastY = 0;
+          stage.onpointerdown = function (e) { dragging = true; lastX = e.clientX; lastY = e.clientY; stage.setPointerCapture(e.pointerId); };
+          stage.onpointermove = function (e) {
+            if (!dragging) return;
+
+            const k = size / stage.getBoundingClientRect().width;
+            offX += (e.clientX - lastX) * k;
+            offY += (e.clientY - lastY) * k;
+            lastX = e.clientX; lastY = e.clientY;
+            draw();
+          };
+          stage.onpointerup = stage.onpointercancel = function (e) {
+            dragging = false;
+            try { stage.releasePointerCapture(e.pointerId); } catch (err) {  }
+          };
+
+          function close() { backdrop.hidden = true; document.removeEventListener('keydown', onKey); }
+          function onKey(e) { if (e.key === 'Escape') close(); }
+          document.addEventListener('keydown', onKey);
+          $('#crop-cancel').onclick = function () { close(); fileInput.value = ''; };
+          $('#crop-apply').onclick = function () {
+            const out = canvas.toDataURL('image/jpeg', 0.85);
+            urlInput.value = out;
+            showPreview(out);
+            hint.textContent = 'Image ready.';
+            close();
+          };
+          draw();
+          backdrop.hidden = false;
+        };
+        img.onerror = function () { hint.textContent = 'That image could not be decoded.'; };
+        img.src = dataUrl;
+      }
+    })();
+
+    const basketEl = $('#added');
+
+    function freeSlot() {
+      const used = new Set(S.basket.map((t) => t.slot));
+      for (let i = 0; i < PALETTE.length; i++) if (!used.has(i)) return i;
+      return -1;
+    }
+
+    function splitEvenly() {
+      const n = S.basket.length;
+      if (!n) return;
+      const base = Math.floor(1000 / n) / 10;
+      const extra = Math.round((100 - base * n) * 10);
+      S.basket.forEach(function (t, i) { t.weight = Math.round((base + (i < extra ? 0.1 : 0)) * 10) / 10; });
+      S.basket.forEach(syncRowWeight);
+    }
+
+    function addToBasket(meta, opts) {
+      opts = opts || {};
+      const address = String(meta.address || '').trim();
+      if (!BASE58.test(address)) { toast('error', 'That is not a valid token address'); return null; }
+      const existing = S.basket.find((t) => t.address === address);
+      if (existing) {
+        flashRow(existing);
+        if (!opts.quiet) toast('info', (existing.symbol ? '$' + existing.symbol : 'That token') + ' is already in the basket');
+        return existing;
+      }
+      if (S.basket.length >= MAX_TOKENS) {
+        toast('error', 'A mixer holds at most ' + MAX_TOKENS + ' tokens', 'Remove one to make room.');
+        return null;
+      }
+      const t = {
+        address: address,
+        symbol: meta.symbol || null,
+        name: meta.name || null,
+        logo: meta.logo || null,
+        verified: !!meta.verified,
+        weight: 0,
+        slot: freeSlot(),
+        status: opts.ready ? 'ready' : 'resolving',
+        el: null,
+      };
+      S.basket.push(t);
+      if (opts.weight !== undefined && opts.weight !== null) {
+        t.weight = Math.round(Number(opts.weight) * 10) / 10;
+      } else if (!S.weightsTouched) {
+        splitEvenly();
+      } else {
+        t.weight = Math.max(0, Math.round((100 - total()) * 10) / 10);
+      }
+      renderRow(t);
+      if (!opts.ready) resolveToken(t);
+      refresh();
+      return t;
+    }
+
+    function removeFromBasket(t) {
+      const i = S.basket.indexOf(t);
+      if (i < 0) return;
+      S.basket.splice(i, 1);
+      const row = t.el;
+      if (!S.weightsTouched) splitEvenly();
+      if (row) {
+        {
+          row.classList.add('row-exit');
+          row.addEventListener('animationend', function () { row.remove(); }, { once: true });
+          setTimeout(function () { if (row.isConnected) row.remove(); }, 400);
+        }
+      }
+      refresh();
+    }
+
+    async function resolveToken(t) {
+      t.status = 'resolving';
+      paintRow(t);
+      try {
+        const r = await fetch('/mixer/token-info', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ token: t.address }),
+        });
+        const d = await r.json().catch(function () { return {}; });
+        if (!r.ok || !d || !(d.symbol || d.name)) throw new Error((d && d.error) || 'That token could not be found');
+        if (S.basket.indexOf(t) < 0) return;
+        t.symbol = t.symbol || d.symbol;
+        t.name = t.name || d.name;
+        t.logo = t.logo || d.logo;
+        t.verified = t.verified || d.is_verified === true;
+        t.rugged = d.rugged === true;
+
+        if (d.priceable === false) throw new Error('No reliable price: too little liquidity to track');
+        t.status = 'ready';
+      } catch (e) {
+        if (S.basket.indexOf(t) < 0) return;
+        t.status = 'error';
+        t.error = e.message;
+      }
+      paintRow(t);
+      refresh();
+    }
+
+    function renderRow(t) {
+      const row = document.createElement('div');
+      row.className = 'added-token tk-row row-enter';
+      row.dataset.address = t.address;
+      row.innerHTML =
+        '<span class="tk-swatch"></span>' +
+        '<span class="tk-logo-slot"></span>' +
+        '<div class="tk-meta">' +
+          '<div class="tk-name-slot"></div>' +
+          '<p class="tk-addr token-addr-display"><span class="tk-a"></span><span class="tk-status"></span></p>' +
+        '</div>' +
+        '<div class="tk-weight">' +
+          '<button type="button" class="tk-step" data-d="-1" aria-label="Decrease weight">&minus;</button>' +
+          '<span class="tk-input-wrap"><input class="tk-input allocation-value" inputmode="decimal" autocomplete="off" aria-label="Weight in percent"><span class="tk-pct">%</span></span>' +
+          '<button type="button" class="tk-step" data-d="1" aria-label="Increase weight">+</button>' +
+        '</div>' +
+        '<button type="button" class="tk-remove" aria-label="Remove token">' +
+          '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>' +
+        '</button>';
+      $('.tk-addr', row).dataset.fullAddress = t.address;
+      $('.tk-a', row).textContent = shortAddr(t.address);
+      t.el = row;
+
+      const input = $('.tk-input', row);
+      input.value = fmtW(t.weight);
+      input.addEventListener('input', function () {
+        let v = input.value.replace(/[^0-9.]/g, '');
+        const parts = v.split('.');
+        if (parts.length > 2) v = parts[0] + '.' + parts.slice(1).join('');
+        if (v.indexOf('.') >= 0) { const p = v.split('.'); v = p[0] + '.' + p[1].slice(0, 1); }
+        if (v !== input.value) input.value = v;
+        const n = parseFloat(v);
+        t.weight = isFinite(n) ? Math.min(100, Math.max(0, Math.round(n * 10) / 10)) : 0;
+        S.weightsTouched = true;
+        refresh();
+      });
+      input.addEventListener('blur', function () { input.value = fmtW(t.weight); });
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          nudge(t, (e.key === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? 5 : 1));
+        }
+      });
+      $$('.tk-step', row).forEach(function (b) {
+        b.addEventListener('click', function (e) { nudge(t, Number(b.dataset.d) * (e.shiftKey ? 5 : 1)); });
+      });
+      $('.tk-remove', row).addEventListener('click', function () { removeFromBasket(t); });
+
+      basketEl.appendChild(row);
+      paintRow(t);
+    }
+
+    function nudge(t, delta) {
+      t.weight = Math.min(100, Math.max(0, Math.round((t.weight + delta) * 10) / 10));
+      S.weightsTouched = true;
+      syncRowWeight(t);
+      refresh();
+    }
+
+    function syncRowWeight(t) {
+      if (!t.el) return;
+      const input = $('.tk-input', t.el);
+      if (document.activeElement !== input) input.value = fmtW(t.weight);
+      input.classList.toggle('is-zero', !(t.weight > 0));
+    }
+
+    function paintRow(t) {
+      const row = t.el;
+      if (!row) return;
+      $('.tk-swatch', row).style.background = colorOf(t);
+      row.classList.toggle('is-error', t.status === 'error');
+
+      const logoSlot = $('.tk-logo-slot', row);
+      const nameSlot = $('.tk-name-slot', row);
+      const known = !!(t.symbol || t.name);
+      if (!known) {
+
+        if (!$('.tk-skel-logo', logoSlot)) {
+          logoSlot.innerHTML = '<div class="skeleton tk-skel-logo"></div>';
+          nameSlot.innerHTML = '<div class="skeleton tk-skel-name"></div>';
+        }
+      } else if (!row.dataset.painted) {
+        row.dataset.painted = '1';
+        logoSlot.innerHTML = '';
+        logoSlot.appendChild(imgWithFallback(logoFor(t), 'tk-logo', t.symbol || t.name));
+        const p = document.createElement('p');
+        p.className = 'tk-name row-enter';
+        const b = document.createElement('b');
+        b.textContent = t.symbol || '?';
+        p.appendChild(b);
+        if (t.verified) {
+          const v = document.createElement('span');
+          v.className = 'verified';
+          v.title = 'Verified on Jupiter';
+          v.textContent = '✓';
+          p.appendChild(v);
+        }
+        const full = document.createElement('span');
+        full.className = 'tk-full';
+        full.textContent = t.name || '';
+        p.appendChild(full);
+        nameSlot.innerHTML = '';
+        nameSlot.appendChild(p);
+      }
+
+      const st = $('.tk-status', row);
+      st.className = 'tk-status';
+      st.innerHTML = '';
+      if (t.status === 'resolving') {
+        st.classList.add('resolving');
+        st.textContent = 'adding…';
+      } else if (t.status === 'error') {
+        st.classList.add('error');
+        st.textContent = t.error || 'Could not load';
+        const retry = document.createElement('button');
+        retry.type = 'button';
+        retry.className = 'tk-retry';
+        retry.textContent = 'Retry';
+        retry.style.marginLeft = '6px';
+        retry.addEventListener('click', function () { resolveToken(t); });
+        st.appendChild(retry);
+      } else if (t.rugged) {
+        st.classList.add('risk');
+        st.textContent = '⚠ flagged as rugged by RugCheck';
+      }
+      syncRowWeight(t);
+    }
+
+    function flashRow(t) {
+      if (!t.el) return;
+      t.el.classList.remove('flash');
+      void t.el.offsetWidth;
+      t.el.classList.add('flash');
+      t.el.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
+    }
+
+    $('#splitBtn').addEventListener('click', function () {
+      S.weightsTouched = false;
+      splitEvenly();
+      refresh();
+    });
+
+    function paintAllocation() {
+      const tot = total();
+      const el = $('#allocation-display');
+      $('[data-v]', el).textContent = fmtW(tot) + '%';
+      el.classList.toggle('is-full', Math.abs(tot - 100) < 0.05);
+      el.classList.toggle('is-over', tot > 100.05);
+      if (el.dataset.v !== String(tot)) {
+        el.classList.remove('pulse');
+        void el.offsetWidth;
+        el.classList.add('pulse');
+      }
+      el.dataset.v = String(tot);
+
+      const hint = $('#remainHint');
+      const left = Math.round((100 - tot) * 10) / 10;
+      hint.classList.remove('is-ok', 'is-over');
+      if (!S.basket.length) hint.textContent = 'Add at least ' + MIN_TOKENS + ' tokens';
+      else if (S.basket.length < MIN_TOKENS) hint.textContent = 'Add one more token — a mixer needs at least ' + MIN_TOKENS;
+      else if (Math.abs(left) < 0.05) { hint.textContent = '✓ Fully allocated'; hint.classList.add('is-ok'); }
+      else if (left > 0) hint.textContent = fmtW(left) + '% left to assign';
+      else { hint.textContent = 'Over by ' + fmtW(-left) + '%'; hint.classList.add('is-over'); }
+
+      $('#tokenCount').textContent = S.basket.length + ' / ' + MAX_TOKENS + ' tokens · min ' + MIN_TOKENS;
+      $('#splitBtn').disabled = S.basket.length < 2;
+      $('#basketEmpty').hidden = S.basket.length > 0;
+      $('#token-search').disabled = S.basket.length >= MAX_TOKENS;
+      $('#token-search').placeholder = S.basket.length >= MAX_TOKENS
+        ? 'Basket full: 10 tokens is the maximum'
+        : 'Search by name or ticker, or paste a mint';
+    }
+
+    function paintBar(bar) {
+      bar.innerHTML = '';
+      const tot = total();
+      const scale = tot > 100 ? 100 / tot : 1;
+      S.basket.forEach(function (t) {
+        if (!(t.weight > 0)) return;
+        const seg = document.createElement('span');
+        seg.className = 'seg';
+        seg.style.flexBasis = (t.weight * scale) + '%';
+        seg.style.background = colorOf(t);
+        seg.title = (t.symbol || shortAddr(t.address)) + ' · ' + fmtW(t.weight) + '%';
+        bar.appendChild(seg);
+      });
+      if (tot < 99.95) {
+        const gap = document.createElement('span');
+        gap.className = 'seg seg-empty';
+        gap.style.flexBasis = (100 - tot) + '%';
+        bar.appendChild(gap);
+      }
+      bar.classList.toggle('is-over', tot > 100.05);
+    }
+
+    const searchEl = $('#token-search');
+    const resultsEl = $('#searchResults');
+    let searchTimer = null, searchCtl = null, results = [], active = -1;
+
+    function openResults(open) {
+      resultsEl.hidden = !open;
+      searchEl.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+    function renderResults(q) {
+      resultsEl.innerHTML = '';
+      active = results.length ? 0 : -1;
+      if (!results.length) {
+        const empty = document.createElement('div');
+        empty.className = 'res-empty';
+        if (BASE58.test(q)) {
+          empty.textContent = 'No match in search. ';
+          const add = document.createElement('button');
+          add.type = 'button';
+          add.className = 'res-add';
+          add.textContent = 'Add this address anyway →';
+          add.addEventListener('click', function () { pick({ address: q }); });
+          empty.appendChild(add);
+        } else {
+          empty.textContent = 'No tokens match “' + q + '”.';
+        }
+        resultsEl.appendChild(empty);
+        openResults(true);
+        return;
+      }
+      results.forEach(function (r, i) {
+        const inBasket = S.basket.some((t) => t.address === r.address);
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'res' + (i === active ? ' is-active' : '') + (inBasket ? ' is-added' : '');
+        b.setAttribute('role', 'option');
+        b.appendChild(imgWithFallback(logoFor(r), 'res-logo', r.symbol));
+        const mid = document.createElement('div');
+        mid.className = 'min-w-0';
+        const top = document.createElement('div');
+        top.className = 'flex items-center gap-1.5';
+        const sym = document.createElement('span');
+        sym.className = 'res-sym';
+        sym.textContent = r.symbol || '?';
+        top.appendChild(sym);
+        if (r.verified) {
+          const v = document.createElement('span');
+          v.className = 'verified'; v.textContent = '✓'; v.title = 'Verified on Jupiter';
+          top.appendChild(v);
+        }
+        const nm = document.createElement('div');
+        nm.className = 'res-name';
+        nm.textContent = (r.name || '') + ' · ' + shortAddr(r.address);
+        mid.appendChild(top); mid.appendChild(nm);
+        const meta = document.createElement('div');
+        meta.className = 'res-meta';
+        if (inBasket) {
+          meta.textContent = 'Added ✓';
+        } else {
+          const cap = fmtCap(r.mcap);
+          const liq = fmtCap(r.liquidity);
+          meta.textContent = [cap ? 'MC ' + cap : null, liq ? 'Liq ' + liq : null].filter(Boolean).join(' · ') || '';
+
+          if (!(r.liquidity >= 50000) || r.organic === 'low') {
+            const warn = document.createElement('div');
+            warn.className = 'res-warn';
+            warn.textContent = !(r.liquidity >= 50000) ? '⚠ thin liquidity' : '⚠ mostly bot volume';
+            meta.appendChild(warn);
+          }
+        }
+        b.appendChild(mid); b.appendChild(meta);
+        b.addEventListener('mouseenter', function () { setActive(i); });
+        b.addEventListener('click', function () { if (!inBasket) pick(r); });
+        resultsEl.appendChild(b);
+      });
+      openResults(true);
+    }
+    function setActive(i) {
+      active = i;
+      $$('.res', resultsEl).forEach(function (el, j) { el.classList.toggle('is-active', j === i); });
+    }
+    function pick(r) {
+      const t = addToBasket(r, { ready: false });
+      searchEl.value = '';
+      openResults(false);
+      if (t) searchEl.focus();
+    }
+    searchEl.addEventListener('input', function () {
+      const q = searchEl.value.trim();
+      clearTimeout(searchTimer);
+      if (searchCtl) searchCtl.abort();
+      if (q.length < 2) { openResults(false); $('#searchSpin').hidden = true; return; }
+      searchTimer = setTimeout(async function () {
+        searchCtl = new AbortController();
+        $('#searchSpin').hidden = false;
+        try {
+          const r = await fetch('/mixer/token-search?q=' + encodeURIComponent(q), { signal: searchCtl.signal, headers: { Accept: 'application/json' } });
+          const d = await r.json();
+          if (!r.ok || !d.ok) throw new Error(d.error || 'Search failed');
+          if (searchEl.value.trim() !== q) return;
+          results = d.results || [];
+          renderResults(q);
+        } catch (e) {
+          if (e.name === 'AbortError') return;
+          results = [];
+          resultsEl.innerHTML = '<div class="res-empty">Search is unavailable right now. You can still paste a mint address.</div>';
+          openResults(true);
+        } finally {
+          $('#searchSpin').hidden = true;
+        }
+      }, 250);
+    });
+    searchEl.addEventListener('keydown', function (e) {
+      if (resultsEl.hidden) {
+        if (e.key === 'Enter' && BASE58.test(searchEl.value.trim())) { e.preventDefault(); pick({ address: searchEl.value.trim() }); }
+        return;
+      }
+      const items = $$('.res', resultsEl);
+      if (e.key === 'ArrowDown') { e.preventDefault(); if (items.length) setActive((active + 1) % items.length); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); if (items.length) setActive((active - 1 + items.length) % items.length); }
+      else if (e.key === 'Enter') {
+        e.preventDefault();
+        const r = results[active];
+        if (r && !S.basket.some((t) => t.address === r.address)) pick(r);
+      } else if (e.key === 'Escape') { openResults(false); }
+    });
+    document.addEventListener('click', function (e) {
+      if (!$('#searchWrap').contains(e.target)) openResults(false);
+    });
+
+    function renderSuggestions() {
+      const box = $('#suggest');
+      box.innerHTML = '';
+      const meme = S.type === 'meme' && (BOOT.suggestions.trending || []).length;
+      const list = meme ? BOOT.suggestions.trending : (BOOT.suggestions.popular || []);
+      if (!list.length) return;
+      const k = document.createElement('span');
+      k.className = 'suggest-k';
+
+      k.innerHTML = meme
+        ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5Z"/></svg>Trending'
+        : 'Popular';
+      box.appendChild(k);
+      list.slice(0, 8).forEach(function (s) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'sug' + (S.basket.some((t) => t.address === s.address) ? ' is-added' : '');
+        b.dataset.address = s.address;
+        b.title = (s.name || s.symbol || '') + (meme && fmtCap(s.mcap) ? ' · MC ' + fmtCap(s.mcap) : '');
+        b.appendChild(imgWithFallback(logoFor(s), 'sug-img', s.symbol));
+        b.appendChild(document.createTextNode(s.symbol || '?'));
+        if (meme && s.change24h !== null && s.change24h !== undefined) {
+          const c = document.createElement('span');
+          c.className = 'sug-chg';
+          c.style.color = s.change24h >= 0 ? 'var(--up)' : 'var(--down)';
+          c.textContent = (s.change24h >= 0 ? '+' : '−') + Math.abs(s.change24h).toFixed(0) + '%';
+          b.appendChild(c);
+        }
+        b.addEventListener('click', function () {
+          addToBasket(s, { ready: false });
+        });
+        box.appendChild(b);
+      });
+    }
+    function paintSuggestionState() {
+      $$('.sug').forEach(function (b) {
+        b.classList.toggle('is-added', S.basket.some((t) => t.address === b.dataset.address));
+      });
+      $$('.ipo-row').forEach(function (b) {
+        const added = S.basket.some((t) => t.address === b.dataset.address);
+        b.classList.toggle('is-added', added);
+        b.querySelector('.ipo-add').textContent = added ? '✓' : '+';
+        b.setAttribute('aria-label', (added ? 'Added: ' : 'Add ') + b.querySelector('.ipo-name').textContent);
+      });
+    }
+
+    function fmtUsd(n) {
+      if (!(n > 0)) return null;
+      return '$' + (n >= 100 ? Math.round(n).toLocaleString('en-US') : n.toFixed(2));
+    }
+    function fmtVal(n) {
+      if (!(n > 0)) return null;
+      if (n >= 1e12) return '$' + (n / 1e12).toFixed(2) + 'T';
+      if (n >= 1e9) return '$' + (n / 1e9).toFixed(0) + 'B';
+      return '$' + (n / 1e6).toFixed(0) + 'M';
+    }
+    function renderPreIpo() {
+      const list = BOOT.suggestions.preIpo || [];
+      $('#ipoCard').hidden = !list.length;
+      const ul = $('#ipoList');
+      ul.innerHTML = '';
+      list.forEach(function (s) {
+        const li = document.createElement('li');
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'ipo-row';
+        b.dataset.address = s.address;
+        b.appendChild(imgWithFallback(logoFor(s), 'ipo-img', s.symbol));
+        const txt = document.createElement('span');
+        txt.className = 'min-w-0';
+        const nm = document.createElement('span');
+        nm.className = 'ipo-name block';
+        nm.textContent = s.name || s.symbol;
+        const meta = document.createElement('span');
+        meta.className = 'ipo-meta block';
+        meta.textContent = fmtUsd(s.price) || '';
+        b.title = (s.name || s.symbol) + (fmtVal(s.valuation) ? ' · ' + fmtVal(s.valuation) + ' valuation' : '');
+        txt.appendChild(nm);
+        txt.appendChild(meta);
+        b.appendChild(txt);
+        const add = document.createElement('span');
+        add.className = 'ipo-add';
+        add.textContent = '+';
+        b.appendChild(add);
+        b.addEventListener('click', function () {
+          if (S.basket.some((t) => t.address === s.address)) return;
+          const added = addToBasket(s, { ready: false });
+          if (added && S.step !== 2) toast('success', (s.name || s.symbol) + ' added to your basket', 'Set its weight under Mixer Details.');
+        });
+        li.appendChild(b);
+        ul.appendChild(li);
+      });
+      paintSuggestionState();
+    }
+
+    const websiteEl = $('#mixer-website');
+
+    function checkWebsite(raw) {
+      let s = String(raw || '').trim();
+      if (!s) return { ok: true, value: null };
+      if (s.length > 300) return { ok: false, error: 'Keep the link under 300 characters' };
+      if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) s = 'https://' + s;
+      let u;
+      try { u = new URL(s); } catch (e) { return { ok: false, error: "That doesn't look like a web address" }; }
+      if (u.protocol !== 'https:' && u.protocol !== 'http:') return { ok: false, error: 'Use an http or https link' };
+      if (!u.hostname || u.hostname.indexOf('.') < 0) return { ok: false, error: 'That link is missing a domain' };
+      if (u.username || u.password) return { ok: false, error: "Links with a username or password aren't allowed" };
+      return { ok: true, value: u.toString(), host: u.hostname.replace(/^www\./, '') };
+    }
+    websiteEl.addEventListener('input', function () {
+      websiteEl.classList.remove('is-invalid');
+      $('#websiteErr').hidden = true;
+      paintWebsite(false);
+      refresh();
+    });
+    websiteEl.addEventListener('blur', function () { paintWebsite(true); });
+    function paintWebsite(showErrors) {
+      const r = checkWebsite(websiteEl.value);
+      const chip = $('#websiteChip');
+      if (r.ok && r.value) {
+        chip.textContent = '↗ ' + r.host;
+        chip.hidden = false;
+      } else {
+        chip.hidden = true;
+      }
+      if (!r.ok && showErrors) {
+        websiteEl.classList.add('is-invalid');
+        $('#websiteErr').textContent = r.error;
+        $('#websiteErr').hidden = false;
+      }
+    }
+    [['mixer-thesis-title', 'ttCnt', 120], ['mixer-thesis', 'thCnt', 5000], ['mixer-counter-thesis', 'ctCnt', 2000]].forEach(function (x) {
+      const input = document.getElementById(x[0]);
+      if (!input) return;
+      input.addEventListener('input', function () { counter(input, document.getElementById(x[1]), x[2]); refresh(); });
+    });
+
+    const buyEl = $('#initial-investment');
+    function buyVal() { const n = parseFloat(buyEl.value); return isFinite(n) ? n : 0; }
+    buyEl.addEventListener('input', function () {
+      let v = buyEl.value.replace(/[^0-9.]/g, '');
+      const parts = v.split('.');
+      if (parts.length > 2) v = parts[0] + '.' + parts.slice(1).join('');
+      if (v.indexOf('.') >= 0) { const p = v.split('.'); v = p[0] + '.' + p[1].slice(0, 4); }
+      if (v !== buyEl.value) buyEl.value = v;
+      buyEl.classList.remove('is-invalid');
+      refresh();
+    });
+    $$('#quick button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (b.dataset.amt === 'max') {
+          if (S.balance === null) { toast('info', 'Still reading your wallet balance'); fetchBalance(); return; }
+
+          const extra = S.cost.state === 'ok' ? (S.cost.deploy || 0) + (S.cost.firstBuy || 0) : 0.05;
+          const max = Math.floor((S.balance - extra - 0.005) * 10000) / 10000;
+          if (max < MIN_BUY) {
+            toast('error', 'Not enough SOL for the opening buy', 'Your wallet holds ' + S.balance.toFixed(4) + ' SOL. Top up from the Wallet page.');
+            return;
+          }
+          buyEl.value = String(max);
+        } else {
+          buyEl.value = b.dataset.amt;
+        }
+        buyEl.dispatchEvent(new Event('input'));
+      });
+    });
+
+    async function fetchBalance() {
+      try {
+        const r = await fetch('/wallet/devnet-balance', { headers: { Accept: 'application/json' } });
+        const d = await r.json();
+        if (r.ok && d && d.balance !== null && d.balance !== undefined) S.balance = Number(d.balance);
+      } catch (e) {  }
+      refresh();
+    }
+
+    let costTimer = null;
+    function scheduleCost() {
+      clearTimeout(costTimer);
+      costTimer = setTimeout(fetchCost, 250);
+    }
+
+    async function fetchCost() {
+      const n = S.basket.length;
+      const key = S.basket.map(function (t) { return t.address; }).join(',');
+      if (!n) { S.cost = { key: '', state: 'ok', deploy: 0, firstBuy: 0 }; paintCosts(); return; }
+      if (S.cost.key === key && S.cost.state === 'ok') { paintCosts(); return; }
+      S.cost = { key: key, state: 'loading' };
+      paintCosts();
+      try {
+        const r = await fetch('/mixer/creation-cost?tokens=' + n + '&mints=' + encodeURIComponent(key), { headers: { Accept: 'application/json' } });
+        const d = await r.json();
+        if (!r.ok || !d.ok) throw new Error('lookup failed');
+        if (S.basket.map(function (t) { return t.address; }).join(',') !== key) return;
+        S.cost = { key: key, state: 'ok', deploy: d.deploy_sol, firstBuy: d.first_buy_sol, newMirrors: d.newMirrors };
+      } catch (e) {
+
+        S.cost = { key: null, state: 'error' };
+      }
+      paintCosts();
+      paintNav();
+    }
+
+    function launchTotal() {
+      if (S.cost.state !== 'ok') return null;
+      return buyVal() + (S.cost.deploy || 0) + (S.cost.firstBuy || 0);
+    }
+    function paintCosts() {
+      const buy = buyVal();
+      const fmt = function (n) { return n.toFixed(4).replace(/\.?0+$/, '') || '0'; };
+      $('#costBuy').textContent = (buy ? fmt(buy) : '0') + ' SOL';
+      const rent = $('#costRent');
+      const dep = $('#costFirstBuy');
+      if (S.cost.state === 'loading') { rent.textContent = 'calculating…'; dep.textContent = 'calculating…'; }
+      else if (S.cost.state === 'error') { rent.textContent = 'unavailable'; dep.textContent = 'unavailable'; }
+      else if (S.cost.state === 'ok') {
+        rent.textContent = Number(S.cost.deploy || 0).toFixed(4) + ' SOL';
+        dep.textContent = Number(S.cost.firstBuy || 0).toFixed(4) + ' SOL';
+      }
+      else { rent.textContent = '—'; dep.textContent = '—'; }
+      const nm = S.cost.newMirrors || 0;
+      $('#costAccounts').textContent = S.basket.length
+        ? '· mixer + ' + S.basket.length + ' vault' + (S.basket.length === 1 ? '' : 's') + (nm ? ' + ' + nm + ' new token' + (nm === 1 ? '' : 's') : '')
+        : '';
+      const totalNeed = launchTotal();
+      $('#total-required').textContent = totalNeed === null ? '—' : fmt(totalNeed) + ' SOL';
+
+      $('#walletBal').textContent = S.balance === null ? 'Wallet: …' : 'Wallet: ' + S.balance.toFixed(4) + ' SOL';
+      const warn = $('#buyWarn');
+      if (S.balance !== null && totalNeed !== null && totalNeed > S.balance) {
+        warn.innerHTML = '';
+        warn.appendChild(document.createTextNode('Your wallet holds ' + S.balance.toFixed(4) + ' SOL, and this launch needs ' + fmt(totalNeed) + ' SOL. '));
+        const a = document.createElement('a');
+        a.href = '/wallet';
+        a.textContent = 'Top up';
+        warn.appendChild(a);
+        warn.hidden = false;
+      } else {
+        warn.hidden = true;
+      }
+      $$('#quick button').forEach(function (b) {
+        b.classList.toggle('is-active', b.dataset.amt !== 'max' && Number(b.dataset.amt) === buy);
+      });
+    }
+
+    function paintPreviewLogo() {
+      const box = $('#pvLogo');
+      const src = $('#logo-preview').hidden ? null : $('#logo-preview').src;
+      box.innerHTML = '';
+      if (src) {
+        const img = document.createElement('img');
+        img.src = src; img.alt = '';
+        img.onerror = function () { box.textContent = (val('mixer-ticker') || val('mixer-name') || 'M').charAt(0).toUpperCase(); };
+        box.appendChild(img);
+      } else {
+        box.textContent = (val('mixer-ticker') || val('mixer-name') || 'M').charAt(0).toUpperCase();
+      }
+    }
+    function paintPreview() {
+      const name = val('mixer-name');
+      const ticker = val('mixer-ticker');
+      const pn = $('#pvName');
+      pn.textContent = name || (S.type === 'meme' ? 'Untitled run' : 'Untitled mixer');
+      pn.classList.toggle('is-empty', !name);
+      $('#pvTicker').textContent = '$' + (ticker || 'TICKER');
+      $('#pvType').textContent = S.type === 'meme' ? 'Meme' + (durationLabel() ? ' · ' + durationLabel() : '') : 'Mixer';
+      if ($('#logo-preview').hidden) paintPreviewLogo();
+
+      const bar = $('#pvBar');
+      if (S.basket.length) { bar.className = 'alloc-bar'; paintBar(bar); }
+      else { bar.innerHTML = ''; bar.className = 'pv-empty-bar'; }
+
+      const legend = $('#pvLegend');
+      legend.innerHTML = '';
+      S.basket.forEach(function (t) {
+        const li = document.createElement('li');
+        const sw = document.createElement('span');
+        sw.className = 'sw'; sw.style.background = colorOf(t);
+        const nm = document.createElement('span');
+        nm.textContent = t.symbol || shortAddr(t.address);
+        const w = document.createElement('span');
+        w.className = 'w'; w.textContent = fmtW(t.weight) + '%';
+        li.appendChild(sw); li.appendChild(nm); li.appendChild(w);
+        legend.appendChild(li);
+      });
+      if (!S.basket.length) {
+        const li = document.createElement('li');
+        li.style.color = 'var(--dim)';
+        li.textContent = 'Tokens you add show up here.';
+        legend.appendChild(li);
+      }
+
+      const th = val('mixer-thesis-title');
+      const pvT = $('#pvThesis');
+      pvT.hidden = !th;
+      pvT.textContent = th ? '“' + th + '”' : '';
+      const site = checkWebsite(websiteEl.value);
+      const pvL = $('#pvLink');
+      if (site.ok && site.value) { pvL.href = site.value; pvL.textContent = '↗ ' + site.host; pvL.hidden = false; }
+      else pvL.hidden = true;
+    }
+
+    const CHECKS = {
+      name: () => val('mixer-name').length > 0,
+      ticker: () => val('mixer-ticker').length > 0,
+      duration: () => S.type !== 'meme' || !!S.durationMs,
+      tokens: () => S.basket.length >= MIN_TOKENS && S.basket.every((t) => t.status === 'ready'),
+      weights: () => S.basket.length > 0 && Math.abs(total() - 100) < 0.05 && S.basket.every((t) => t.weight > 0),
+      buy: () => buyVal() >= MIN_BUY,
+    };
+    function paintChecks() {
+      let done = 0, all = 0;
+      $$('#checks li').forEach(function (li) {
+        const k = li.dataset.check;
+        li.hidden = k === 'duration' && S.type !== 'meme';
+        const ok = !!CHECKS[k]();
+        li.classList.toggle('is-ok', ok);
+        if (!li.hidden) { all++; if (ok) done++; }
+      });
+      const cc = $('#checkCount');
+      cc.textContent = done + '/' + all;
+      cc.classList.toggle('is-done', done === all);
+    }
+
+    function blocker(step) {
+      if (step === 1) {
+        if (!val('mixer-name')) return { msg: 'Give it a name', el: nameEl };
+        if (!val('mixer-ticker')) return { msg: 'Pick a ticker', el: tickerEl };
+        if (S.type === 'meme' && !S.durationMs) return { msg: 'Choose how long it runs', el: $('#durationBox') };
+      }
+      if (step === 2) {
+        if (S.basket.length < MIN_TOKENS) return { msg: 'Add at least ' + MIN_TOKENS + ' tokens — a mixer is a basket', el: searchEl };
+        if (S.basket.some((t) => t.status === 'resolving')) return { msg: 'Loading token details…', el: null };
+        if (S.basket.some((t) => t.status === 'error')) return { msg: 'Remove or retry the tokens that did not load', el: null };
+        if (S.basket.some((t) => !(t.weight > 0))) return { msg: 'Every token needs a weight above 0%', el: null };
+        const left = Math.round((100 - total()) * 10) / 10;
+        if (left > 0.05) return { msg: 'Weights must add up to 100% — ' + fmtW(left) + '% left', el: null };
+        if (left < -0.05) return { msg: 'Weights add up to more than 100% — over by ' + fmtW(-left) + '%', el: null };
+      }
+      if (step === 3) {
+        if (!checkWebsite(websiteEl.value).ok) return { msg: 'Fix the link, or clear it', el: websiteEl };
+      }
+      if (step === 4) {
+        if (buyVal() < MIN_BUY) return { msg: 'The opening buy must be at least ' + MIN_BUY + ' SOL', el: buyEl };
+        if (S.cost.state === 'loading') return { msg: 'Working out the launch cost…', el: null };
+        const need = launchTotal();
+        if (need !== null && S.balance !== null && S.balance < need) {
+          return { msg: 'Your wallet needs ' + need.toFixed(4) + ' SOL for this launch — it holds ' + S.balance.toFixed(4), el: buyEl };
+        }
+      }
+      return null;
+    }
+
+    function refresh() {
+      paintAllocation();
+      paintBar($('#allocBar'));
+      paintSuggestionState();
+      paintPreview();
+      paintChecks();
+      paintCosts();
+      scheduleCost();
+      paintNav();
+      if (S.step === 4) paintReview();
+    }
+
+    function paintStepper() {
+      $$('#stepper .st').forEach(function (li) {
+        const n = Number(li.dataset.go);
+        li.classList.toggle('is-active', n === S.step);
+        li.classList.toggle('is-done', n < S.step || (n <= S.maxStep && n !== S.step && !blocker(n)));
+        li.setAttribute('aria-current', n === S.step ? 'step' : 'false');
+        const num = $('.st-n', li);
+        num.textContent = (n !== S.step && n < S.step) ? '✓' : String(n);
+      });
+    }
+    function paintNav() {
+      $('#backBtn').hidden = S.step === 1;
+      $('#nextBtn').hidden = S.step === 4;
+      $('#launch-btn').hidden = S.step !== 4;
+      const b = blocker(S.step);
+      const hint = $('#navHint');
+      hint.classList.remove('is-err');
+      if (S.step === 4) {
+        const firstBad = [1, 2, 3, 4].map(blocker).find(Boolean);
+        hint.textContent = firstBad ? firstBad.msg : 'Ready when you are.';
+      } else {
+        hint.textContent = b ? b.msg : '';
+      }
+      paintStepper();
+    }
+
+    function revealIn(panel) {
+      $$('.reveal', panel).forEach(function (el, i) {
+        el.classList.remove('reveal-in');
+        el.style.animationDelay = (i * 55) + 'ms';
+        void el.offsetWidth;
+        el.classList.add('reveal-in');
+      });
+    }
+
+    function goTo(n) {
+      if (S.busy || n === S.step || n < 1 || n > 4) return;
+      const dir = n > S.step ? 1 : -1;
+      const from = $('.panel[data-panel="' + S.step + '"]');
+      const to = $('.panel[data-panel="' + n + '"]');
+      S.busy = true;
+      openResults(false);
+
+      from.classList.add(dir > 0 ? 'out-left' : 'out-right');
+      setTimeout(function () {
+        from.hidden = true;
+        from.classList.remove('out-left', 'out-right');
+        to.classList.add(dir > 0 ? 'in-right' : 'in-left');
+        to.hidden = false;
+        void to.offsetWidth;
+        to.classList.remove('in-right', 'in-left');
+        revealIn(to);
+        S.step = n;
+        S.maxStep = Math.max(S.maxStep, n);
+        if (n === 4) { paintReview(); if (S.balance === null) fetchBalance(); }
+        refresh();
+        const wiz = $('.wizard');
+        if (wiz.getBoundingClientRect().top < 0) wiz.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+        const first = $('input:not([type=hidden]):not([disabled]), textarea', to);
+        if (first && n !== 4) setTimeout(function () { first.focus({ preventScroll: true }); }, 200);
+        setTimeout(function () { S.busy = false; }, 380);
+      }, 230);
+    }
+
+    function complain(b) {
+      const hint = $('#navHint');
+      hint.textContent = b.msg;
+      hint.classList.add('is-err');
+      if (!reduce) { hint.classList.remove('shake'); void hint.offsetWidth; hint.classList.add('shake'); }
+      if (b.el) {
+        if (b.el.classList && (b.el.tagName === 'INPUT' || b.el.tagName === 'TEXTAREA')) {
+          b.el.classList.add('is-invalid');
+          b.el.focus();
+        }
+        if (!reduce) { b.el.classList.remove('shake'); void b.el.offsetWidth; b.el.classList.add('shake'); }
+      }
+    }
+
+    $('#nextBtn').addEventListener('click', function () {
+      const b = blocker(S.step);
+      if (b) { complain(b); return; }
+      goTo(S.step + 1);
+    });
+    $('#backBtn').addEventListener('click', function () { goTo(S.step - 1); });
+    $$('#stepper .st').forEach(function (li) {
+      li.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); li.click(); }
+      });
+      li.addEventListener('click', function () {
+        const n = Number(li.dataset.go);
+        if (n <= S.step) { goTo(n); return; }
+
+        for (let k = S.step; k < n; k++) {
+          const b = blocker(k);
+          if (b) { if (k !== S.step) goTo(k); else complain(b); return; }
+        }
+        goTo(n);
+      });
+    });
+
+    $$('.panel input.inp').forEach(function (input) {
+      if (input.id === 'token-search') return;
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); $('#nextBtn').hidden ? $('#launch-btn').click() : $('#nextBtn').click(); }
+      });
+    });
+
+    function paintReview() {
+      const box = $('#review');
+      box.innerHTML = '';
+      const rows = [
+        ['Type', S.type === 'meme' ? 'Meme mixer · runs ' + (BOOT.durations.find((d) => String(d.ms) === S.durationMs) || { label: '?' }).label : 'Mixer · long-term', 1],
+        ['Name', (val('mixer-name') || '—') + (val('mixer-ticker') ? '  $' + val('mixer-ticker') : ''), 1],
+        ['Basket', S.basket.length ? S.basket.map((t) => (t.symbol || shortAddr(t.address)) + ' ' + fmtW(t.weight) + '%').join(' · ') : null, 2],
+        ['Thesis', val('mixer-thesis-title') || (val('mixer-thesis') ? val('mixer-thesis').slice(0, 90) + (val('mixer-thesis').length > 90 ? '…' : '') : null), 3],
+        ['Link', (function () { const r = checkWebsite(websiteEl.value); return r.ok && r.value ? r.host : null; })(), 3],
+      ];
+      if (S.type !== 'meme') {
+        const cat = $('.category-option.is-active');
+        rows.push(['Category', cat ? cat.textContent.trim() : null, 1]);
+      }
+      rows.forEach(function (r) {
+        const row = document.createElement('div');
+        row.className = 'rv-row';
+        const k = document.createElement('span'); k.className = 'rv-k'; k.textContent = r[0];
+        const v = document.createElement('span'); v.className = 'rv-v';
+        if (r[1]) v.textContent = r[1];
+        else { const m = document.createElement('span'); m.className = 'muted'; m.textContent = 'None'; v.appendChild(m); }
+        const e = document.createElement('button'); e.type = 'button'; e.className = 'rv-edit'; e.textContent = 'Edit';
+        e.addEventListener('click', function () { goTo(r[2]); });
+        row.appendChild(k); row.appendChild(v); row.appendChild(e);
+        box.appendChild(row);
+      });
+    }
+
+    $('#launch-btn').addEventListener('click', handleLaunch);
+
+    function handleLaunch() {
+      if (S.launching) return;
+      for (let k = 1; k <= 4; k++) {
+        const b = blocker(k);
+        if (b) {
+          if (k !== 4) { goTo(k); setTimeout(function () { complain(b); }, 500); }
+          else complain(b);
+          return;
+        }
+      }
+      const site = checkWebsite(websiteEl.value);
+      const inv = buyVal();
+      const tokens = S.basket.map(function (t) {
+        return { address: t.address, weight: t.weight / 100, symbol: t.symbol || null };
+      });
+
+      const payload = {
+        name: val('mixer-name'),
+        ticker: val('mixer-ticker').toUpperCase(),
+        logo: val('mixer-logo'),
+        description: val('mixer-description'),
+        category: S.type === 'meme' ? 'memes' : val('mixer-category'),
+        thesisTitle: val('mixer-thesis-title'),
+        thesis: val('mixer-thesis'),
+
+        counterThesis: val('mixer-counter-thesis'),
+        parentMixerId: val('parent-mixer-id'),
+        website: site.value || '',
+
+        durationMs: S.type === 'meme' ? S.durationMs : '',
+        tokens: tokens,
+        initialInvestment: inv,
+      };
+
+      S.launching = true;
+      const launchBtn = $('#launch-btn');
+      launchBtn.disabled = true;
+      const overlay = $('#deploy-overlay');
+      const errEl = $('#deploy-error');
+      const mirrorList = $('#mirror-list');
+
+      function setStep(name, state) {
+        const el = overlay.querySelector('[data-step="' + name + '"]');
+        if (!el) return;
+        el.classList.remove('active', 'done');
+        if (state) el.classList.add(state);
+      }
+      ['prepare', 'mirror', 'vaults', 'buy', 'done'].forEach(function (n) { setStep(n, null); });
+      mirrorList.innerHTML = '';
+      errEl.classList.add('hidden');
+      errEl.textContent = '';
+      overlay.classList.add('active');
+      setStep('prepare', 'active');
+
+      function mirrorRow(label, right, rightCls) {
+        const row = document.createElement('div');
+        row.className = 'mirror-row';
+        const a = document.createElement('span');
+        a.className = 'text-gray-300 truncate';
+        a.textContent = label;
+        const b = document.createElement('span');
+        b.className = rightCls;
+        b.textContent = right;
+        row.appendChild(a); row.appendChild(b);
+        return row;
+      }
+
+      const t1 = setTimeout(function () {
+        setStep('prepare', 'done');
+        setStep('mirror', 'active');
+        tokens.forEach(function (t) {
+          mirrorList.appendChild(mirrorRow(t.symbol || t.address.slice(0, 6), 'minting…', 'text-[11px] text-[var(--dim)]'));
+        });
+      }, 900);
+      const t2 = setTimeout(function () { setStep('mirror', 'done'); setStep('vaults', 'active'); }, 4500);
+
+      function fail(msg, detail) {
+        clearTimeout(t1); clearTimeout(t2);
+        ['prepare', 'mirror', 'vaults', 'buy', 'done'].forEach(function (n) { setStep(n, null); });
+        errEl.textContent = msg + (detail ? ' — ' + detail : '');
+        errEl.classList.remove('hidden');
+        S.launching = false;
+        launchBtn.disabled = false;
+        setTimeout(function () { overlay.classList.remove('active'); }, 2600);
+        toast('error', msg, detail);
+      }
+
+      fetch('/mixer/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(payload),
+      })
+        .then(async function (r) {
+          const text = await r.text();
+          let body = {};
+          try { body = JSON.parse(text); } catch (e) { body = { error: text.slice(0, 200) }; }
+          return { status: r.status, body: body };
+        })
+        .then(function (res) {
+          const body = res.body;
+          clearTimeout(t1); clearTimeout(t2);
+          if (res.status === 200 && body.ok) {
+            setStep('prepare', 'done');
+            mirrorList.innerHTML = '';
+            (body.mirrors || []).forEach(function (m) {
+              mirrorList.appendChild(mirrorRow(m.symbol || m.real_mint.slice(0, 6), shortAddr(m.mirror_mint), 'font-mono text-[11px]'));
+            });
+            setStep('mirror', 'done');
+            setStep('vaults', 'done');
+
+            const ib = body.initial_buy;
+            const buySub = $('#deploy-buy-sub');
+            if (!ib) {
+              setStep('buy', 'done');
+              buySub.textContent = 'No opening buy requested';
+            } else if (ib.ok) {
+              setStep('buy', 'done');
+              buySub.textContent = 'Bought ' + ib.sol + ' SOL across ' + ib.legs + ' tokens';
+            } else {
+              setStep('buy', null);
+              buySub.textContent = 'Opening buy failed: ' + ib.error + ' — the mixer deployed fine, you can buy from its page.';
+              buySub.style.color = '#ff8a9b';
+            }
+            setStep('done', 'active');
+            $('#deploy-done-sub').textContent = (body.vaults || []).length + ' vaults deployed — opening your mixer';
+            setTimeout(function () {
+              setStep('done', 'done');
+              window.location.href = '/mixer/' + body.mixer_state;
+            }, 1400);
+            return;
+          }
+          if (res.status === 400 && Array.isArray(body.unpriced) && body.unpriced.length) {
+
+            S.basket.forEach(function (t) {
+              if (body.unpriced.indexOf(t.address) >= 0) {
+                t.status = 'error';
+                t.error = 'No reliable price: too little liquidity to track';
+                paintRow(t);
+              }
+            });
+            fail(body.error, body.hint);
+            setTimeout(function () { goTo(2); refresh(); }, 2700);
+            return;
+          }
+          if (res.status === 409 && body.existing) {
+            fail(body.error || 'That exact basket already exists', [body.detail, body.hint].filter(Boolean).join(' '));
+            setTimeout(function () { goTo(2); }, 2700);
+            return;
+          }
+          fail(body.error || body.message || 'Failed to launch mixer', body.hint);
+        })
+        .catch(function (err) {
+          fail('Could not reach the server', err.message);
+        });
+    }
+
+    function prefillFromRemix() {
+      if (!PREFILL || !PREFILL.parent) return;
+      nameEl.value = (PREFILL.parent.name + ' Remix').slice(0, 64);
+      nameEl.dispatchEvent(new Event('input'));
+      if (PREFILL.parent.category) {
+        $('#mixer-category').value = PREFILL.parent.category;
+        if (S.paintCategories) S.paintCategories();
+      }
+      S.weightsTouched = true;
+      (PREFILL.tokens || []).forEach(function (t) {
+        addToBasket({ address: t.address, symbol: t.symbol, name: t.name, logo: t.logo, verified: false },
+          { ready: !!(t.symbol || t.name), weight: t.weight, quiet: true });
+      });
+    }
+
+    function prefillFromQuery() {
+      try {
+        const mint = new URLSearchParams(window.location.search).get('add');
+        if (!mint || !BASE58.test(mint)) return;
+        const known = (BOOT.suggestions.trending || []).concat(BOOT.suggestions.popular || [], BOOT.suggestions.preIpo || [])
+          .find((s) => s.address === mint) || { address: mint };
+        const t = addToBasket(known, { quiet: true });
+        if (t) toast('success', (t.symbol ? '$' + t.symbol : 'Token') + ' is in your basket', 'Name your ' + (S.type === 'meme' ? 'run' : 'mixer') + ', then add more coins in step 2.');
+      } catch (e) {  }
+    }
+
+    setType(S.type);
+    renderPreIpo();
+    counter(nameEl, $('#nameCnt'), 64);
+    counter(tickerEl, $('#tickerCnt'), 10);
+    if (PREFILL) prefillFromRemix(); else prefillFromQuery();
+    revealIn($('.panel[data-panel="1"]'));
+    refresh();
+    fetchBalance();
+  })();
+  </script>
+</body>
+
+</html>

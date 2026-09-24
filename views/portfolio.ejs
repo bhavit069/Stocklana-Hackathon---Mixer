@@ -1,0 +1,603 @@
+<%
+
+  function fmtUsd(v) {
+    var n = Number(v);
+    if (v == null || !isFinite(n)) return '—';
+    var a = Math.abs(n);
+    var s = a >= 1000 ? a.toLocaleString('en-US', { maximumFractionDigits: 0 })
+          : a >= 1 ? a.toFixed(2)
+          : a >= 0.01 ? a.toFixed(4)
+          : a === 0 ? '0.00'
+          : a.toPrecision(2);
+    return (n < 0 ? '-$' : '$') + s;
+  }
+
+  function signedUsd(v) {
+    if (v == null || !isFinite(Number(v))) return '—';
+    return (Number(v) >= 0 ? '+' : '') + fmtUsd(v);
+  }
+
+  function fmtSol(v, dp) {
+    var n = Number(v);
+    if (v == null || !isFinite(n)) return '—';
+    return n.toFixed(dp == null ? 4 : dp);
+  }
+
+  function signedSol(v) {
+    if (v == null || !isFinite(Number(v))) return '—';
+    return (Number(v) >= 0 ? '+' : '') + Number(v).toFixed(4);
+  }
+
+  function fmtPct(v, dp) {
+    if (v == null || !isFinite(Number(v))) return '—';
+    var n = Number(v);
+    return (n >= 0 ? '+' : '') + n.toFixed(dp == null ? 2 : dp) + '%';
+  }
+
+  function fmtPrice(v) {
+    var n = Number(v);
+    if (!isFinite(n) || n <= 0) return '—';
+    if (n >= 1) return '$' + n.toFixed(4);
+    if (n >= 0.01) return '$' + n.toFixed(4);
+    if (n >= 0.000001) return '$' + n.toFixed(8).replace(/0+$/, '');
+    return '$' + n.toExponential(2);
+  }
+
+  function relTime(d) {
+    var t = new Date(d).getTime();
+    if (!isFinite(t)) return '';
+    var s = Math.max(0, Math.round((Date.now() - t) / 1000));
+    if (s < 60) return 'just now';
+    var m = Math.round(s / 60); if (m < 60) return m + 'm ago';
+    var h = Math.round(m / 60); if (h < 24) return h + 'h ago';
+    var dd = Math.round(h / 24); if (dd < 30) return dd + 'd ago';
+    return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+
+  function heldSince(d) {
+    var t = new Date(d);
+    if (!isFinite(t.getTime())) return '';
+    return t.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+
+  var GAIN = '#22c55e', LOSS = '#f6465d', FLAT = '#9AA0A6';
+  function dirColour(v) {
+    var n = Number(v);
+    if (v == null || !isFinite(n) || n === 0) return FLAT;
+    return n > 0 ? GAIN : LOSS;
+  }
+  function arrow(v) {
+    var n = Number(v);
+    if (v == null || !isFinite(n) || n === 0) return '';
+    return n > 0 ? '▲ ' : '▼ ';
+  }
+
+  function sparkline(values, colour, w, h) {
+    if (!values || values.length < 2) {
+      return '<span class="text-[11px] text-[#5a616b]">Not enough history</span>';
+    }
+    var min = Math.min.apply(null, values), max = Math.max.apply(null, values);
+    var pad = 4, flat = (max - min) < 1e-12;
+    var step = (w - pad * 2) / (values.length - 1);
+    var pts = values.map(function (v, i) {
+      var x = pad + i * step;
+      var y = flat ? h / 2 : pad + (h - pad * 2) * (1 - (v - min) / (max - min));
+      return [x.toFixed(1), y.toFixed(1)];
+    });
+    var line = pts.map(function (p, i) { return (i ? 'L' : 'M') + p[0] + ' ' + p[1]; }).join(' ');
+    var area = line + ' L' + pts[pts.length - 1][0] + ' ' + h + ' L' + pts[0][0] + ' ' + h + ' Z';
+    var last = pts[pts.length - 1];
+    return '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" aria-hidden="true" style="overflow:visible">' +
+      '<path d="' + area + '" fill="' + colour + '" fill-opacity="0.10"/>' +
+      '<path d="' + line + '" fill="none" stroke="' + colour + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>' +
+      '<circle cx="' + last[0] + '" cy="' + last[1] + '" r="3.5" fill="' + colour + '" stroke="#111317" stroke-width="2"/>' +
+      '</svg>';
+  }
+
+  var hasHoldings = holdings.length > 0;
+%>
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Portfolio · Mixer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            background: '#0b0d10', surface: '#111317', stroke: 'rgba(255,255,255,0.07)',
+            primary: '#7453E2', textSecondary: '#9AA0A6', muted: '#6b7280'
+          }
+        }
+      }
+    }
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+
+    .card {
+      background: #111317;
+      border: 1px solid rgba(255, 255, 255, .07);
+      border-radius: 16px;
+      box-shadow: 0 1px 0 rgba(255, 255, 255, .04) inset;
+    }
+
+    .label {
+      font-size: 11px;
+      font-weight: 500;
+      color: #8b919a;
+      letter-spacing: .01em;
+    }
+
+    /* Columns of numbers align; big standalone figures stay proportional. */
+    .num { font-variant-numeric: tabular-nums; }
+
+    /* Allocation bar: 2px surface gaps between segments, rounded outer ends. */
+    .alloc-bar { display: flex; gap: 2px; height: 10px; border-radius: 999px; overflow: hidden; }
+    .alloc-seg { height: 100%; min-width: 4px; transition: opacity .15s ease; }
+    .alloc-bar:hover .alloc-seg { opacity: .55; }
+    .alloc-bar .alloc-seg:hover, .alloc-bar .alloc-seg:focus-visible { opacity: 1; outline: none; }
+
+    .pos-table th {
+      font-size: 11px; font-weight: 500; color: #6b7280; text-align: left;
+      padding: 12px 16px; border-bottom: 1px solid rgba(255, 255, 255, .06);
+      white-space: nowrap;
+    }
+    .pos-table td { padding: 14px 16px; border-bottom: 1px solid rgba(255, 255, 255, .045); vertical-align: middle; }
+    .pos-table tbody tr:last-child td { border-bottom: 0; }
+    .pos-row { cursor: pointer; transition: background .12s ease; }
+    .pos-row:hover { background: rgba(255, 255, 255, .025); }
+
+    .meter { height: 4px; border-radius: 999px; background: rgba(255, 255, 255, .07); overflow: hidden; }
+    .meter > span { display: block; height: 100%; border-radius: 999px; }
+
+    .btn-ghost {
+      display: inline-flex; align-items: center; justify-content: center;
+      height: 30px; padding: 0 12px; border-radius: 8px; font-size: 12px; font-weight: 600;
+      color: #d1d5db; background: rgba(255, 255, 255, .04); border: 1px solid rgba(255, 255, 255, .08);
+      transition: background .12s, border-color .12s, color .12s;
+    }
+    .btn-ghost:hover { background: rgba(255, 255, 255, .08); color: #fff; }
+    .btn-sell:hover { color: #ff8a9b; border-color: rgba(246, 70, 93, .45); background: rgba(246, 70, 93, .08); }
+
+    .tip {
+      position: fixed; z-index: 60; pointer-events: none; display: none;
+      background: #1b1e24; border: 1px solid rgba(255, 255, 255, .1); border-radius: 8px;
+      padding: 7px 10px; font-size: 12px; color: #e5e7eb; box-shadow: 0 10px 30px rgba(0, 0, 0, .5);
+      white-space: nowrap;
+    }
+  </style>
+</head>
+
+<body class="bg-background text-white min-h-screen">
+
+  <%- include('partials/appnav', { user: user, active: 'dashboard' }) %>
+
+  <div class="max-w-[1200px] mx-auto px-6 py-8">
+
+    <header class="flex flex-wrap items-end justify-between gap-4 mb-6">
+      <div>
+        <h1 class="text-[26px] font-semibold tracking-tight">Portfolio</h1>
+        <p class="text-sm text-textSecondary mt-1">
+          <%= holdings.length %> position<%= holdings.length === 1 ? '' : 's' %> · Solana devnet
+          <% if (solUsd) { %><span class="text-muted"> · SOL <%= fmtUsd(solUsd) %></span><% } %>
+        </p>
+      </div>
+      <div class="flex items-center gap-2">
+        <a href="/mixers" class="btn-ghost h-9 px-4">Explore mixers</a>
+        <a href="/mixer/create" class="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg text-[13px] font-semibold bg-primary hover:bg-[#6344d1] transition-colors">
+          <span class="text-base leading-none">+</span> Create mixer
+        </a>
+      </div>
+    </header>
+
+    <section class="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5 mb-8">
+
+      <div class="card p-6 sm:p-7">
+        <p class="label">Portfolio value</p>
+
+        <div class="flex flex-wrap items-end gap-x-4 gap-y-1 mt-2">
+          <p class="text-[52px] leading-[1.05] font-semibold tracking-tight">
+            <%= totalValueUsd != null ? fmtUsd(totalValueUsd) : fmtSol(totalValue) + ' SOL' %>
+          </p>
+          <% if (totalValueUsd != null) { %>
+            <p class="text-sm text-textSecondary num mb-2"><%= fmtSol(totalValue) %> SOL</p>
+          <% } %>
+        </div>
+
+        <% if (totalPnl != null) { %>
+          <div class="flex flex-wrap items-center gap-2 mt-3">
+            <span class="inline-flex items-center gap-1.5 text-sm font-semibold px-2.5 py-1 rounded-lg num"
+                  style="color:<%= dirColour(totalPnl) %>;background:<%= totalPnl >= 0 ? 'rgba(34,197,94,.10)' : 'rgba(246,70,93,.10)' %>">
+              <%= arrow(totalPnl) %><%= totalPnlUsd != null ? signedUsd(totalPnlUsd) : signedSol(totalPnl) + ' SOL' %>
+              <span class="font-medium opacity-90">(<%= fmtPct(totalPnlPct) %>)</span>
+            </span>
+            <span class="text-xs text-muted">all time · <%= signedSol(totalPnl) %> SOL on <%= fmtSol(totalInvested) %> SOL invested</span>
+          </div>
+        <% } else if (hasHoldings) { %>
+          <p class="text-xs text-muted mt-3">P/L unavailable until your positions can be priced.</p>
+        <% } %>
+
+        <div class="h-px bg-white/[0.06] my-6"></div>
+
+        <div class="flex items-center justify-between mb-3">
+          <p class="label">Allocation</p>
+          <% if (unvalued > 0) { %>
+            <p class="text-[11px] text-[#eab308]"><%= unvalued %> position<%= unvalued === 1 ? '' : 's' %> not priceable, left out</p>
+          <% } %>
+        </div>
+
+        <% if (allocation.length) { %>
+          <div class="alloc-bar" role="img"
+               aria-label="Allocation: <%= allocation.map(function (a) { return a.name + ' ' + a.share.toFixed(1) + '%'; }).join(', ') %>">
+            <% allocation.forEach(function (a) { %>
+              <span class="alloc-seg" tabindex="0" style="flex:<%= a.share.toFixed(4) %> 1 0;background:<%= a.colour %>"
+                    data-tip="<%= a.name %><%= a.count ? ' (' + a.count + ' positions)' : '' %> · <%= a.share.toFixed(1) %>% · <%= fmtSol(a.value_sol) %> SOL"></span>
+            <% }) %>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-x-6 gap-y-2.5 mt-4">
+            <% allocation.forEach(function (a) { %>
+              <div class="flex items-center gap-2 min-w-0 text-[13px]">
+                <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:<%= a.colour %>"></span>
+                <span class="text-gray-200 truncate"><%= a.name %><% if (a.count) { %> <span class="text-muted">(<%= a.count %>)</span><% } %></span>
+                <span class="ml-auto num text-textSecondary"><%= a.share.toFixed(1) %>%</span>
+              </div>
+            <% }) %>
+          </div>
+        <% } else { %>
+          <div class="rounded-xl border border-dashed border-white/[0.08] py-7 px-5 text-center">
+            <p class="text-sm text-gray-300">Nothing allocated yet.</p>
+            <p class="text-xs text-muted mt-1">Buy into a mixer and its share of your portfolio shows up here.</p>
+          </div>
+        <% } %>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-5">
+        <div class="card p-5 flex flex-col">
+          <p class="label">Wallet balance</p>
+          <p class="text-2xl font-semibold mt-2"><%= fmtSol(solBalance) %> <span class="text-sm font-medium text-textSecondary">SOL</span></p>
+          <p class="text-xs text-muted mt-1 num"><%= cashUsd != null ? '≈ ' + fmtUsd(cashUsd) : 'Available to invest' %></p>
+          <a href="/wallet" class="mt-auto pt-4 text-[13px] font-medium text-[#a78bfa] hover:text-white transition-colors">Manage wallet →</a>
+        </div>
+
+        <div class="card p-5">
+          <p class="label">Performance</p>
+          <% if (best && worst) { %>
+            <div class="mt-3 space-y-3">
+              <a href="/mixer/<%= best.mixer_id %>" class="flex items-center gap-2.5 group">
+                <span class="w-2 h-2 rounded-full shrink-0" style="background:<%= best.colour %>"></span>
+                <span class="text-[13px] text-gray-200 truncate group-hover:text-white">Best · <%= best.name %></span>
+                <span class="ml-auto text-[13px] font-semibold num" style="color:<%= dirColour(best.pnl_pct) %>"><%= arrow(best.pnl_pct) %><%= fmtPct(best.pnl_pct, 1) %></span>
+              </a>
+              <a href="/mixer/<%= worst.mixer_id %>" class="flex items-center gap-2.5 group">
+                <span class="w-2 h-2 rounded-full shrink-0" style="background:<%= worst.colour %>"></span>
+                <span class="text-[13px] text-gray-200 truncate group-hover:text-white">Worst · <%= worst.name %></span>
+                <span class="ml-auto text-[13px] font-semibold num" style="color:<%= dirColour(worst.pnl_pct) %>"><%= arrow(worst.pnl_pct) %><%= fmtPct(worst.pnl_pct, 1) %></span>
+              </a>
+            </div>
+          <% } else { %>
+            <p class="text-xs text-muted mt-2 leading-relaxed">Hold two or more mixers to compare how they're doing.</p>
+          <% } %>
+        </div>
+      </div>
+    </section>
+
+    <section class="mb-8">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-[15px] font-semibold">Positions <span class="text-muted font-normal ml-1"><%= holdings.length %></span></h2>
+        <% if (hasHoldings) { %><p class="text-[11px] text-muted">Largest first · P/L in SOL, shown at today's SOL price</p><% } %>
+      </div>
+
+      <% if (!hasHoldings) { %>
+        <div class="card py-14 px-6 text-center">
+          <div class="mx-auto w-12 h-12 rounded-2xl bg-primary/15 border border-primary/30 flex items-center justify-center mb-4">
+            <svg class="w-5 h-5 text-[#a78bfa]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-6"/>
+            </svg>
+          </div>
+          <p class="text-[15px] font-semibold">No positions yet</p>
+          <p class="text-sm text-textSecondary mt-1 max-w-sm mx-auto">Pick a basket that matches your view, or build your own and let others invest alongside you.</p>
+          <div class="flex items-center justify-center gap-2 mt-5">
+            <a href="/mixers" class="inline-flex items-center h-9 px-4 rounded-lg text-[13px] font-semibold bg-primary hover:bg-[#6344d1] transition-colors">Explore mixers</a>
+            <a href="/mixer/create" class="btn-ghost h-9 px-4">Create a mixer</a>
+          </div>
+        </div>
+      <% } else { %>
+        <div class="card overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="pos-table w-full min-w-[860px]">
+              <thead>
+                <tr>
+                  <th>Mixer</th>
+                  <th class="text-right" style="text-align:right">Price</th>
+                  <th>Price trend</th>
+                  <th class="text-right" style="text-align:right">Value</th>
+                  <th class="text-right" style="text-align:right">P/L</th>
+                  <th style="width:140px">Allocation</th>
+                  <th style="width:1%"></th>
+                </tr>
+              </thead>
+              <tbody>
+                <% holdings.forEach(function (h) { %>
+                  <%
+                    var hist = h.history || [];
+                    var histFirst = hist.length ? hist[0] : null, histLast = hist.length ? hist[hist.length - 1] : null;
+                    var trendTip = (hist.length >= 2)
+                      ? '24h: ' + fmtPrice(histFirst) + ' → ' + fmtPrice(histLast) + ' (' + fmtPct((histLast / histFirst - 1) * 100) + ')'
+                      : 'Not enough price history yet';
+                    var msLeft = h.expires_at && !h.settled_at ? new Date(h.expires_at).getTime() - Date.now() : null;
+                  %>
+                  <tr class="pos-row" data-href="/mixer/<%= h.mixer_id %>">
+                    <td>
+                      <div class="flex items-center gap-3 min-w-0">
+                        <span class="w-1 self-stretch rounded-full shrink-0" style="background:<%= h.colour %>" aria-hidden="true"></span>
+                        <% if (h.image) { %>
+                          <img src="<%= h.image %>" alt="" class="w-9 h-9 rounded-xl object-cover bg-[#1b1e24] shrink-0" loading="lazy"
+                               onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'w-9 h-9 rounded-xl bg-[#1b1e24] shrink-0 flex items-center justify-center text-sm font-bold text-[#a78bfa]',textContent:'<%= (h.ticker || h.name || '?').charAt(0).toUpperCase() %>'}))">
+                        <% } else { %>
+                          <span class="w-9 h-9 rounded-xl bg-[#1b1e24] shrink-0 flex items-center justify-center text-sm font-bold text-[#a78bfa]"><%= (h.ticker || h.name || '?').charAt(0).toUpperCase() %></span>
+                        <% } %>
+                        <div class="min-w-0">
+                          <div class="flex items-center gap-2">
+                            <a href="/mixer/<%= h.mixer_id %>" class="text-[14px] font-semibold text-white truncate hover:underline"><%= h.name || 'Untitled' %></a>
+                            <% if (msLeft !== null) { %>
+
+                              <span class="text-[10px] px-1.5 py-0.5 rounded font-semibold shrink-0"
+                                    style="color:<%= msLeft > 0 && msLeft < 3600000 ? '#ff8ac4' : '#ffcf66' %>;background:<%= msLeft > 0 && msLeft < 3600000 ? 'rgba(255,79,163,.14)' : 'rgba(255,176,32,.12)' %>">
+                                &#x1F525; <%= msLeft > 0 ? (msLeft < 3600000 ? 'ends in ' + Math.max(1, Math.round(msLeft / 60000)) + 'm' : 'ends in ' + Math.round(msLeft / 3600000) + 'h') : 'paying out' %>
+                              </span>
+                            <% } %>
+                          </div>
+                          <p class="text-[12px] text-muted mt-0.5 truncate">
+                            <span class="font-mono"><%= h.ticker || '—' %></span>
+                            <% if (h.token_count) { %> · <%= h.token_count %> tokens<% } %>
+                            <% if (h.first_trade) { %> · held since <%= heldSince(h.first_trade) %><% } %>
+                          </p>
+                        </div>
+                      </div>
+                    </td>
+
+                    <td class="text-right num">
+                      <p class="text-[13px] text-gray-200"><%= fmtPrice(h.price) %></p>
+                      <p class="text-[12px] mt-0.5">
+                        <% if (h.chg != null) { %>
+                          <span style="color:<%= dirColour(h.chg) %>"><%= arrow(h.chg) %><%= fmtPct(h.chg) %></span>
+                          <span class="text-muted"><%= h.chgLabel %></span>
+                        <% } else { %><span class="text-muted">—</span><% } %>
+                      </p>
+                    </td>
+
+                    <td>
+                      <span class="inline-block align-middle" data-tip="<%= trendTip %>" tabindex="0" aria-label="<%= trendTip %>">
+                        <%- sparkline(hist, h.colour, 112, 34) %>
+                      </span>
+                    </td>
+
+                    <td class="text-right num">
+                      <p class="text-[14px] font-semibold text-white"><%= h.value_usd != null ? fmtUsd(h.value_usd) : (h.value_sol != null ? fmtSol(h.value_sol) + ' SOL' : '—') %></p>
+                      <p class="text-[12px] text-muted mt-0.5"><%= h.value_sol != null ? fmtSol(h.value_sol) + ' SOL' : 'not priceable' %></p>
+                    </td>
+
+                    <td class="text-right num">
+                      <% if (h.pnl_sol == null) { %>
+                        <p class="text-[13px] text-muted">—</p>
+                      <% } else { %>
+                        <p class="text-[14px] font-semibold" style="color:<%= dirColour(h.pnl_sol) %>">
+                          <%= arrow(h.pnl_sol) %><%= h.pnl_usd != null ? signedUsd(h.pnl_usd) : signedSol(h.pnl_sol) %>
+                        </p>
+                        <p class="text-[12px] mt-0.5">
+                          <span style="color:<%= dirColour(h.pnl_sol) %>"><%= fmtPct(h.pnl_pct) %></span>
+                          <span class="text-muted">· cost <%= fmtSol(h.cost_sol) %> SOL</span>
+                        </p>
+                      <% } %>
+                    </td>
+
+                    <td>
+                      <div class="flex items-center gap-2.5">
+                        <div class="meter flex-1"><span style="width:<%= h.share != null ? Math.max(2, h.share).toFixed(1) : 0 %>%;background:<%= h.colour %>"></span></div>
+                        <span class="text-[12px] text-textSecondary num w-[44px] text-right"><%= h.share != null ? h.share.toFixed(1) + '%' : '—' %></span>
+                      </div>
+                    </td>
+
+                    <td>
+                      <div class="flex items-center gap-2 justify-end">
+                        <a href="/mixer/<%= h.mixer_id %>" class="btn-ghost">Trade</a>
+                        <button type="button" class="btn-ghost btn-sell sell-btn" data-mixer="<%= h.mixer_id %>" data-name="<%= h.name %>">Sell</button>
+                      </div>
+                    </td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      <% } %>
+    </section>
+
+    <section>
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-[15px] font-semibold">Recent activity</h2>
+        <% if (activity.length) { %><p class="text-[11px] text-muted">Last <%= activity.length %> trade<%= activity.length === 1 ? '' : 's' %></p><% } %>
+      </div>
+
+      <% if (!activity.length) { %>
+        <div class="card py-8 px-6 text-center">
+          <p class="text-sm text-textSecondary">No trades yet. Your buys and sells will appear here.</p>
+        </div>
+      <% } else { %>
+        <div class="card divide-y divide-white/[0.045]">
+          <% activity.forEach(function (t) { %>
+            <div class="flex items-center gap-4 px-5 py-3.5">
+              <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg shrink-0"
+                    style="background:<%= t.side === 'buy' ? 'rgba(34,197,94,.10)' : 'rgba(246,70,93,.10)' %>;color:<%= t.side === 'buy' ? GAIN : LOSS %>"
+                    title="<%= t.side === 'buy' ? 'Buy' : 'Sell' %>">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <% if (t.side === 'buy') { %><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/><% } else { %><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/><% } %>
+                </svg>
+              </span>
+
+              <div class="min-w-0 flex-1">
+                <p class="text-[13px] text-gray-200 truncate">
+                  <span class="font-semibold text-white"><%= t.side === 'buy' ? 'Bought' : 'Sold' %></span>
+                  <a href="/mixer/<%= t.mixer_id %>" class="hover:underline"><%= t.name %></a>
+                  <% if (t.ticker) { %><span class="font-mono text-[12px] text-muted ml-1"><%= t.ticker %></span><% } %>
+                </p>
+                <p class="text-[12px] text-muted mt-0.5">
+                  <% if (t.price_usd) { %>at <%= fmtPrice(t.price_usd) %> · <% } %>
+                  <span title="<%= new Date(t.created_at).toLocaleString() %>"><%= relTime(t.created_at) %></span>
+                </p>
+              </div>
+
+              <p class="text-[13px] font-semibold num text-right shrink-0" style="color:<%= t.side === 'buy' ? '#e5e7eb' : GAIN %>">
+                <%= t.side === 'buy' ? '−' : '+' %><%= fmtSol(t.sol) %> <span class="text-muted font-normal">SOL</span>
+              </p>
+
+              <% if (t.signature) { %>
+                <a href="https://explorer.solana.com/tx/<%= t.signature %>?cluster=devnet" target="_blank" rel="noopener noreferrer"
+                   class="shrink-0 text-muted hover:text-white transition-colors" title="View transaction" aria-label="View transaction on Solana Explorer">
+                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14 21 3"/>
+                  </svg>
+                </a>
+              <% } else { %>
+                <span class="w-4 shrink-0"></span>
+              <% } %>
+            </div>
+          <% }) %>
+        </div>
+      <% } %>
+    </section>
+  </div>
+
+  <div id="tip" class="tip" role="tooltip"></div>
+
+  <script src="/js/alerts.js"></script>
+  <script src="/js/trademodal.js"></script>
+  <script>
+
+    document.querySelectorAll('.pos-row').forEach(function (row) {
+      row.addEventListener('click', function (e) {
+        if (e.target.closest('a, button')) return;
+        window.location.href = row.dataset.href;
+      });
+    });
+
+    (function () {
+      var tip = document.getElementById('tip');
+      function show(el) {
+        var text = el.getAttribute('data-tip');
+        if (!text) return;
+        tip.textContent = text;
+        tip.style.display = 'block';
+        var r = el.getBoundingClientRect();
+        var left = Math.min(window.innerWidth - tip.offsetWidth - 8,
+                            Math.max(8, r.left + r.width / 2 - tip.offsetWidth / 2));
+        tip.style.left = left + 'px';
+        tip.style.top = (r.top - tip.offsetHeight - 8) + 'px';
+      }
+      function hide() { tip.style.display = 'none'; }
+      document.querySelectorAll('[data-tip]').forEach(function (el) {
+        el.addEventListener('mouseenter', function () { show(el); });
+        el.addEventListener('mouseleave', hide);
+        el.addEventListener('focus', function () { show(el); });
+        el.addEventListener('blur', hide);
+      });
+      window.addEventListener('scroll', hide, true);
+    })();
+
+    document.querySelectorAll('.sell-btn').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var mixerId = btn.dataset.mixer;
+        var name = btn.dataset.name || 'this mixer';
+        var label = btn.textContent;
+
+        TradeModal.open({
+          title: 'Sell ' + name,
+          confirmLabel: 'Confirm sell',
+          runningLabel: 'Selling…',
+          summaryHtml:
+            '<div style="margin-bottom:8px;color:#fff;font-size:12px">' +
+              'How much of this position?</div>' +
+            '<div style="display:flex;gap:6px">' +
+              ['25', '50', '75', '100'].map(function (v) {
+                return '<button type="button" data-pct="' + v + '" ' +
+                  'style="flex:1;padding:6px 0;border-radius:5px;' +
+                  'border:1px solid #2C2C2C;background:none;color:#9AA0A6;' +
+                  'font-size:11px;cursor:pointer">' + v + '%</button>';
+              }).join('') +
+            '</div>' +
+            '<div style="display:flex;align-items:center;gap:8px;margin-top:10px">' +
+              '<input id="sellPct" type="text" inputmode="decimal" value="100" ' +
+                'style="flex:1;background:#15181e;border:1px solid #2C2C2C;' +
+                'border-radius:5px;padding:7px 9px;color:#fff;font-size:13px">' +
+              '<span style="color:#9AA0A6;font-size:12px">%</span>' +
+            '</div>',
+          steps: ['Redeem shares', 'Swap to SOL', 'Settle payout'],
+          note: 'Burns shares on devnet. This cannot be undone.',
+          onConfirm: function () { run(); },
+        });
+
+        var panel = document.getElementById('tradeModal');
+        var field = panel.querySelector('#sellPct');
+        panel.querySelectorAll('[data-pct]').forEach(function (b) {
+          b.addEventListener('click', function () { field.value = b.dataset.pct; });
+        });
+
+        async function run() {
+          var percent = parseFloat(field ? field.value : '');
+          if (!percent || percent <= 0 || percent > 100) {
+            TradeModal.setNote('Enter a percentage between 0 and 100.');
+            return;
+          }
+
+          TradeModal.setPhase('running');
+          TradeModal.progress(0);
+          TradeModal.setNote('Redeeming ' + percent + '% of your position…');
+          btn.disabled = true;
+          btn.textContent = 'Selling…';
+
+          try {
+            var r = await fetch('/mixer/' + mixerId + '/sell', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ percent: percent })
+            });
+            var b = await r.json();
+            if (!r.ok || !b.ok) throw new Error(b.error || 'Sell failed');
+
+            TradeModal.allDone();
+            TradeModal.setPhase('done');
+            TradeModal.setTitle('Sale complete');
+            TradeModal.setNote('Received ' + Number(b.sol_returned || 0).toFixed(6) +
+              ' SOL. Shares remaining: ' + b.shares_remaining + '.');
+
+            Alerts.success('Sold ' + percent + '% of ' + name, {
+              detail: 'Received ' + Number(b.sol_returned || 0).toFixed(6) + ' SOL.'
+            });
+
+            setTimeout(function () { window.location.reload(); }, 1800);
+          } catch (err) {
+            console.error(err);
+            TradeModal.fail(0);
+            TradeModal.setPhase('failed');
+            TradeModal.setTitle('Sale failed');
+            TradeModal.setNote(err.message);
+            Alerts.error('Sale failed', { detail: err.message });
+            btn.disabled = false;
+            btn.textContent = label;
+          }
+        }
+      });
+    });
+  </script>
+
+</body>
+
+</html>

@@ -1,0 +1,340 @@
+<%
+
+%>
+<style>
+  #xCard {
+    position: fixed;
+    z-index: 90;
+    /* Wider than the first pass: at 290px a two-line bio wrapped to four and
+       the whole card read as a tooltip rather than a profile. */
+    width: 340px;
+    display: none;
+    overflow: hidden;
+    border-radius: 16px;
+    border: 1px solid #2f3336;
+    background: #16181c;
+    box-shadow: 0 12px 34px rgba(0, 0, 0, .62);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    /* Fades in rather than snapping: a card that appears instantly under a
+       moving cursor reads as a misclick. */
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity .13s ease, transform .13s ease;
+  }
+  #xCard.is-open { display: block; }
+  #xCard.is-in { opacity: 1; transform: translateY(0); }
+
+  /* The banner is a real image when the profile has one, and a flat brand
+     colour when it does not -- a blank strip looks like a failed load.
+     Sized to X's own 3:1 banner ratio so the artwork is not crushed. */
+  .xc-banner {
+    height: 113px;
+    background: #2f3336;
+    background-size: cover;
+    background-position: center;
+  }
+
+  .xc-body { padding: 0 16px 16px; }
+
+  .xc-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    /* Pulls the avatar up over the banner, as on a real profile. */
+    margin-top: -34px;
+    margin-bottom: 10px;
+  }
+
+  .xc-avatar {
+    width: 68px; height: 68px;
+    border-radius: 50%;
+    border: 4px solid #16181c;
+    background: #0b0d10;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+
+  .xc-logo {
+    margin-top: 42px;
+    color: #e7e9ea;
+    flex-shrink: 0;
+  }
+
+  .xc-name {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 17px;
+    font-weight: 800;
+    color: #e7e9ea;
+    line-height: 1.25;
+    letter-spacing: -.01em;
+  }
+  .xc-handle {
+    font-size: 14px;
+    color: #71767b;
+    margin-top: 2px;
+  }
+
+  .xc-bio {
+    font-size: 14px;
+    line-height: 1.5;
+    color: #e7e9ea;
+    margin-top: 12px;
+    /* Six lines: enough for a real bio to read as prose, short of the point
+       where the card becomes a page. */
+    display: -webkit-box;
+    -webkit-line-clamp: 6;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    white-space: pre-line;
+    word-break: break-word;
+  }
+
+  /* @mentions and #hashtags inside a bio, coloured the way X colours them.
+     The text is escaped first, so these are built from escaped output. */
+  .xc-bio a { color: #1d9bf0; }
+  .xc-bio a:hover { text-decoration: underline; }
+
+  .xc-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13.5px;
+    color: #71767b;
+    margin-top: 12px;
+  }
+
+  .xc-stats {
+    display: flex;
+    gap: 18px;
+    font-size: 14px;
+    color: #71767b;
+    margin-top: 10px;
+  }
+  .xc-stats b {
+    color: #e7e9ea;
+    font-weight: 700;
+  }
+
+  .xc-cta {
+    display: block;
+    width: 100%;
+    margin-top: 15px;
+    padding: 9px 0;
+    border-radius: 999px;
+    border: 1px solid #536471;
+    text-align: center;
+    font-size: 14px;
+    font-weight: 700;
+    color: #e7e9ea;
+    transition: background .15s ease;
+  }
+  .xc-cta:hover { background: rgba(239, 243, 244, .1); }
+
+  .xc-loading {
+    padding: 22px 14px;
+    text-align: center;
+    font-size: 12.5px;
+    color: #71767b;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #xCard { transition: none; }
+  }
+</style>
+
+<div id="xCard" role="dialog" aria-label="X profile"></div>
+
+<script>
+(function xHoverCard() {
+  var card = document.getElementById('xCard');
+  if (!card) return;
+
+  var OPEN_DELAY = 350;
+  var CLOSE_DELAY = 220;
+
+  var openTimer = null, closeTimer = null;
+  var currentHandle = null;
+  var anchor = null;
+  var cache = {};
+
+  function esc(v) {
+    return String(v == null ? '' : v)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function compact(n) {
+    if (n == null || !isFinite(n)) return '—';
+    if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1).replace(/\.0$/, '') + 'M';
+    if (n >= 1e3) return (n / 1e3).toFixed(n >= 1e4 ? 0 : 1).replace(/\.0$/, '') + 'K';
+    return String(n);
+  }
+
+  function joined(iso) {
+    if (!iso) return null;
+    var d = new Date(iso);
+    if (isNaN(d)) return null;
+    return 'Joined ' + d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  }
+
+  function linkify(escaped) {
+    return escaped
+      .replace(/(^|[^\w@])@([A-Za-z0-9_]{1,15})\b/g,
+        '$1<a href="https://x.com/$2" target="_blank" rel="noopener">@$2</a>')
+      .replace(/(^|\s)#([A-Za-z0-9_]+)/g,
+        '$1<a href="https://x.com/hashtag/$2" target="_blank" rel="noopener">#$2</a>');
+  }
+
+  var X_LOGO = '<svg class="xc-logo" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
+    '<path d="M18.9 1.2h3.7l-8.1 9.2 9.5 12.6h-7.4l-5.8-7.6-6.7 7.6H.4l8.6-9.9L0 1.2h7.6l5.2 6.9zm-1.3 19.6h2L6.5 3.3H4.3z"/></svg>';
+
+  var VERIFIED = '<svg width="16" height="16" viewBox="0 0 24 24" fill="#1d9bf0" aria-label="Verified">' +
+    '<path d="M22.5 12.5c0-1.6-.9-2.9-2.2-3.6.3-1.5-.2-3-1.3-4.1-1.1-1.1-2.6-1.6-4.1-1.3C14.2 2.2 12.9 1.3 11.3 1.3S8.4 2.2 7.7 3.5C6.2 3.2 4.7 3.7 3.6 4.8c-1.1 1.1-1.6 2.6-1.3 4.1C1 9.6.1 10.9.1 12.5s.9 2.9 2.2 3.6c-.3 1.5.2 3 1.3 4.1 1.1 1.1 2.6 1.6 4.1 1.3.7 1.3 2 2.2 3.6 2.2s2.9-.9 3.6-2.2c1.5.3 3-.2 4.1-1.3 1.1-1.1 1.6-2.6 1.3-4.1 1.3-.7 2.2-2 2.2-3.6zm-12.7 4.6L6 13.3l1.8-1.8 2 2 4.9-4.9 1.8 1.8z"/></svg>';
+
+  function render(p) {
+    if (!p) {
+
+      return null;
+    }
+
+    var bannerStyle = p.banner
+      ? 'background-image:url(' + esc(p.banner) + ')'
+      : 'background:linear-gradient(135deg,#3a3f45,#22262b)';
+
+    var avatar = p.avatar
+      ? '<img class="xc-avatar" src="' + esc(p.avatar) + '" alt="">'
+      : '<div class="xc-avatar"></div>';
+
+    var when = joined(p.createdAt);
+
+    return '' +
+      '<div class="xc-banner" style="' + bannerStyle + '"></div>' +
+      '<div class="xc-body">' +
+        '<div class="xc-top">' + avatar + X_LOGO + '</div>' +
+        '<div class="xc-name">' + esc(p.name) + (p.verified ? VERIFIED : '') + '</div>' +
+        '<div class="xc-handle">@' + esc(p.username) + '</div>' +
+        (p.description ? '<div class="xc-bio">' + linkify(esc(p.description)) + '</div>' : '') +
+        (when
+          ? '<div class="xc-meta">' +
+              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+              '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>' +
+              esc(when) +
+            '</div>'
+          : '') +
+
+        (p.followers != null || p.following != null
+          ? '<div class="xc-stats">' +
+              '<span><b>' + compact(p.following) + '</b> Following</span>' +
+              '<span><b>' + compact(p.followers) + '</b> Followers</span>' +
+              (p.posts != null ? '<span><b>' + compact(p.posts) + '</b> Posts</span>' : '') +
+            '</div>'
+          : '') +
+        '<a class="xc-cta" href="' + esc(p.url) + '" target="_blank" rel="noopener">See profile on X</a>' +
+      '</div>';
+  }
+
+  function place() {
+    if (!anchor) return;
+    var r = anchor.getBoundingClientRect();
+    var w = card.offsetWidth || 290;
+    var h = card.offsetHeight || 220;
+    var GAP = 8;
+
+    var top = r.bottom + GAP;
+    if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - GAP);
+
+    var left = r.left + r.width / 2 - w / 2;
+    left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
+
+    card.style.top = top + 'px';
+    card.style.left = left + 'px';
+  }
+
+  function show(html) {
+    card.innerHTML = html;
+    card.classList.add('is-open');
+    place();
+
+    requestAnimationFrame(function () {
+      card.classList.add('is-in');
+      place();
+    });
+  }
+
+  function hide() {
+    card.classList.remove('is-in', 'is-open');
+    card.innerHTML = '';
+    currentHandle = null;
+    anchor = null;
+  }
+
+  async function load(handle) {
+    if (Object.prototype.hasOwnProperty.call(cache, handle)) return cache[handle];
+    try {
+      var r = await fetch('/api/x-profile/' + encodeURIComponent(handle),
+                          { headers: { Accept: 'application/json' } });
+      var d = await r.json();
+      cache[handle] = (d && d.ok) ? d.profile : null;
+    } catch {
+      cache[handle] = null;
+    }
+    return cache[handle];
+  }
+
+  function open(el) {
+    var handle = (el.dataset.xcard || '').replace(/^@/, '');
+    if (!handle) return;
+
+    anchor = el;
+    currentHandle = handle;
+
+    var known = Object.prototype.hasOwnProperty.call(cache, handle);
+    if (known && !cache[handle]) return;
+
+    if (known) { show(render(cache[handle])); return; }
+
+    show('<div class="xc-loading">Loading profile…</div>');
+
+    load(handle).then(function (p) {
+
+      if (currentHandle !== handle) return;
+      var html = render(p);
+      if (!html) { hide(); return; }
+      show(html);
+    });
+  }
+
+  document.addEventListener('mouseover', function (e) {
+    var el = e.target.closest && e.target.closest('[data-xcard]');
+    if (el) {
+      clearTimeout(closeTimer);
+      if (currentHandle === (el.dataset.xcard || '').replace(/^@/, '')) return;
+      clearTimeout(openTimer);
+      openTimer = setTimeout(function () { open(el); }, OPEN_DELAY);
+      return;
+    }
+
+    if (e.target.closest && e.target.closest('#xCard')) clearTimeout(closeTimer);
+  });
+
+  document.addEventListener('mouseout', function (e) {
+    var leftTrigger = e.target.closest && e.target.closest('[data-xcard]');
+    var leftCard = e.target.closest && e.target.closest('#xCard');
+    if (!leftTrigger && !leftCard) return;
+
+    clearTimeout(openTimer);
+    clearTimeout(closeTimer);
+    closeTimer = setTimeout(hide, CLOSE_DELAY);
+  });
+
+  window.addEventListener('scroll', function () {
+    if (card.classList.contains('is-open')) hide();
+  }, true);
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && card.classList.contains('is-open')) hide();
+  });
+})();
+</script>

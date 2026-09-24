@@ -1,0 +1,863 @@
+<%
+
+  function fmtPrice(v) {
+    var n = Number(v);
+    if (!isFinite(n) || n <= 0) return '0.00';
+    if (n >= 1000) return n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    if (n >= 1) return n.toFixed(2);
+    if (n >= 0.01) return n.toFixed(4);
+    if (n >= 0.000001) return n.toFixed(8).replace(/0+$/, '');
+    return n.toExponential(2);
+  }
+
+  function fmtSol(v) {
+    var n = Number(v) || 0;
+    if (n === 0) return '0';
+    if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
+    if (n >= 1) return n.toFixed(2);
+    return n.toFixed(3);
+  }
+
+  function fmtNum(v) {
+    var n = Number(v) || 0;
+    if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+    if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
+    return String(n);
+  }
+
+  function fmtPct(v) {
+    if (v === null || v === undefined) return null;
+    var n = Number(v);
+    if (!isFinite(n)) return null;
+    return (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
+  }
+
+  function ago(ts) {
+    if (!ts) return null;
+    var s = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
+    if (s < 60) return s + 's';
+    if (s < 3600) return Math.floor(s / 60) + 'm';
+    if (s < 86400) return Math.floor(s / 3600) + 'h';
+    return Math.floor(s / 86400) + 'd';
+  }
+
+  function sparkPath(points, w, h) {
+    if (!points || points.length < 2) return null;
+    var min = Math.min.apply(null, points);
+    var max = Math.max.apply(null, points);
+    var range = max - min;
+
+    if (range === 0) return 'M0,' + (h / 2) + ' L' + w + ',' + (h / 2);
+
+    var d = '';
+    for (var i = 0; i < points.length; i++) {
+      var x = (i / (points.length - 1)) * w;
+      var y = h - ((points[i] - min) / range) * h;
+      d += (i === 0 ? 'M' : ' L') + x.toFixed(2) + ',' + y.toFixed(2);
+    }
+    return d;
+  }
+
+  var sparkLabel = 'Trend';
+  (function () {
+    var spans = mixers.map(function (m) { return m.sparklineSpanMs || 0; })
+                      .filter(function (x) { return x > 0; });
+    if (!spans.length) return;
+    var ms = Math.max.apply(null, spans);
+    var mins = ms / 60000;
+    if (mins >= 1440) sparkLabel = Math.round(mins / 1440) + 'd';
+    else if (mins >= 60) sparkLabel = Math.round(mins / 60) + 'h';
+    else if (mins >= 1) sparkLabel = Math.round(mins) + 'm';
+  })();
+
+  var SORT_TABS = [
+    { key: 'volume',  label: 'Volume' },
+    { key: 'gainers', label: 'Gainers' },
+    { key: 'losers',  label: 'Losers' },
+    { key: 'holders', label: 'Holders' },
+    { key: 'trades',  label: 'Trades' },
+    { key: 'newest',  label: 'New' }
+  ];
+%>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Markets · Mixer</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0b0d10;
+      --panel: #101317;
+      --row: #14171c;
+      --row-hover: #191d24;
+      --stroke: #1e2228;
+      --text: #e6e8eb;
+      --muted: #7d8590;
+      --dim: #5a616b;
+      --up: #22c55e;
+      --down: #f6465d;
+      --accent: #7453E2;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Tabular numerals keep columns of figures aligned -- the single biggest
+       thing that makes a table read as a trading screen rather than a list. */
+    .num { font-variant-numeric: tabular-nums; }
+
+    .market-table { border-collapse: separate; border-spacing: 0; width: 100%; }
+
+    .market-table thead th {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: var(--bg);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--dim);
+      padding: 0 14px 10px;
+      text-align: right;
+      white-space: nowrap;
+    }
+    .market-table thead th:first-child { text-align: left; }
+
+    .market-table tbody tr {
+      background: var(--row);
+      transition: background .12s ease;
+      cursor: pointer;
+    }
+    .market-table tbody tr:hover { background: var(--row-hover); }
+
+    .market-table tbody td {
+      padding: 11px 14px;
+      font-size: 13px;
+      text-align: right;
+      border-top: 1px solid var(--stroke);
+      white-space: nowrap;
+    }
+    .market-table tbody td:first-child { text-align: left; }
+
+    /* Round only the outer corners of each row block. */
+    .market-table tbody td:first-child  { border-left: 1px solid var(--stroke);  border-radius: 8px 0 0 8px; }
+    .market-table tbody td:last-child   { border-right: 1px solid var(--stroke); border-radius: 0 8px 8px 0; }
+    .market-table tbody td:last-child,
+    .market-table tbody td:first-child,
+    .market-table tbody td              { border-bottom: 1px solid var(--stroke); }
+
+    .up { color: var(--up); }
+    .down { color: var(--down); }
+    .flat { color: var(--muted); }
+
+    .tab {
+      padding: 6px 13px;
+      font-size: 12.5px;
+      font-weight: 500;
+      border-radius: 7px;
+      color: var(--muted);
+      transition: all .12s ease;
+      white-space: nowrap;
+    }
+    .tab:hover { color: var(--text); background: var(--row); }
+    .tab.active { color: #fff; background: var(--row-hover); }
+
+    /* Category pills sit above the sort tabs and are visually distinct from
+       them: a pill picks WHAT you are looking at, a tab picks the ORDER. */
+    .cat-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 11px;
+      font-size: 12.5px;
+      font-weight: 500;
+      border-radius: 999px;
+      border: 1px solid var(--stroke);
+      color: var(--muted);
+      white-space: nowrap;
+      transition: all .12s ease;
+    }
+    .cat-pill:hover { color: var(--text); border-color: #3a3a44; }
+    .cat-pill.active {
+      color: #fff;
+      border-color: var(--accent);
+      background: rgba(116, 83, 226, .12);
+    }
+    .cat-icon { font-size: 11px; opacity: .85; }
+    .cat-count {
+      font-size: 10.5px;
+      font-variant-numeric: tabular-nums;
+      color: var(--dim);
+      background: var(--row);
+      border-radius: 999px;
+      padding: 1px 6px;
+    }
+    .cat-pill.active .cat-count { color: #fff; background: rgba(255, 255, 255, .12); }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 7px;
+      font-size: 11px;
+      font-weight: 500;
+      border-radius: 5px;
+      background: rgba(255,255,255,.04);
+      border: 1px solid var(--stroke);
+      color: var(--muted);
+    }
+
+    /* A mixer younger than a day has no 24h change yet. Said plainly, rather
+       than a dash that reads as missing data. */
+    .new-chip {
+      display: inline-flex; align-items: center;
+      padding: 1px 7px; border-radius: 999px;
+      font-size: 10.5px; font-weight: 600; letter-spacing: .02em;
+      color: #b9a4ff; background: rgba(116,83,226,.12); border: 1px solid rgba(116,83,226,.3);
+      cursor: help;
+    }
+
+    .meme-pointer {
+      margin-left: 4px;
+      color: #fbbf24;
+      font-weight: 500;
+      white-space: nowrap;
+      transition: color .15s ease;
+    }
+    .meme-pointer:hover { color: #fde68a; }
+    .meme-pointer-live {
+      display: inline-flex; align-items: center; gap: 4px;
+      margin-left: 2px; padding: 1px 6px;
+      font-size: 11px; font-weight: 600;
+      border-radius: 999px;
+      background: rgba(251,191,36,.12);
+      border: 1px solid rgba(251,191,36,.3);
+    }
+    .meme-pointer-dot {
+      width: 5px; height: 5px; border-radius: 999px; background: #fbbf24;
+      animation: memeDot 1.6s ease-in-out infinite;
+    }
+    @keyframes memeDot { 0%, 100% { opacity: 1 } 50% { opacity: .3 } }
+    @media (prefers-reduced-motion: reduce) { .meme-pointer-dot { animation: none; } }
+
+    /* Who built this, and that it is not real money yet. */
+    .about-bar {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+      margin-bottom: 18px; padding: 9px 14px;
+      border-radius: 10px;
+      font-size: 12.5px; color: var(--muted);
+      background: rgba(255, 255, 255, .02);
+      border: 1px solid var(--stroke, rgba(255, 255, 255, .07));
+    }
+    .about-net {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 2px 8px; border-radius: 999px;
+      font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+      color: #fbbf24; background: rgba(251, 191, 36, .1); border: 1px solid rgba(251, 191, 36, .28);
+    }
+    .about-net-dot { width: 6px; height: 6px; border-radius: 999px; background: #fbbf24; }
+    .about-by { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+    .about-by a {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-weight: 600; color: #e7e9ea;
+      transition: color .15s ease;
+    }
+    .about-by a:hover { color: #fff; text-decoration: underline; text-underline-offset: 3px; }
+    @media (max-width: 640px) { .about-by { margin-left: 0; } }
+
+    .stat-tile {
+      padding: 13px 16px;
+      background: var(--panel);
+      border: 1px solid var(--stroke);
+      border-radius: 10px;
+    }
+
+    .token-chip {
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      border: 2px solid var(--row);
+      background: #0b0d10;
+      object-fit: cover;
+    }
+    tbody tr:hover .token-chip { border-color: var(--row-hover); }
+
+    /* A quiet dash reads as "not applicable"; a loud one reads as broken. */
+    .na { color: var(--dim); font-size: 12px; }
+
+    /* Discovery columns, from the design reference. Three at-a-glance lists
+       above the table so the page opens with something to look at rather than
+       a wall of rows. */
+    .disc-col {
+      flex: 1;
+      min-width: 0;
+      background: var(--panel);
+      border: 1px solid var(--stroke);
+      padding: 16px;
+      border-radius: 12px;
+    }
+    .disc-head {
+      font-weight: 600;
+      font-size: 13.5px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .disc-tag {
+      background: var(--row);
+      color: var(--dim);
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 6px;
+      text-transform: uppercase;
+      letter-spacing: .03em;
+    }
+    .fund-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--row);
+      padding: 9px 10px;
+      margin-bottom: 8px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background .15s ease;
+    }
+    .fund-card:last-child { margin-bottom: 0; }
+    .fund-card:hover { background: var(--row-hover); }
+
+    /* ===== Competitions =====
+       A tile rather than a table row: a contest is a thing to browse, and the
+       leader's return is the hook. Auto-fill so the grid reflows from three
+       columns to one without a breakpoint per width. */
+    .comp-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 10px;
+    }
+    .comp-tile {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 11px 12px;
+      border-radius: 10px;
+      background: var(--row);
+      border: 1px solid transparent;
+      transition: background .15s ease, border-color .15s ease;
+    }
+    .comp-tile:hover {
+      background: var(--row-hover);
+      border-color: rgba(116, 83, 226, .45);
+    }
+    .comp-tile-logo {
+      width: 30px; height: 30px;
+      border-radius: 7px;
+      object-fit: cover;
+      background: #0b0d10;
+      border: 1px solid var(--stroke);
+      flex-shrink: 0;
+    }
+    .comp-tile-title {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: #fff;
+      line-height: 1.35;
+      /* Two lines, then clip: a long thesis title must not make one tile
+         twice the height of its neighbours. */
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .comp-tile-sub {
+      font-size: 10.5px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+    .comp-tile-leader {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding-top: 8px;
+      border-top: 1px solid var(--stroke);
+      font-size: 11px;
+    }
+    .comp-tile-crown { color: #facc15; font-size: 10px; flex-shrink: 0; }
+    .comp-tile-name {
+      color: #c9d1d9;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1;
+    }
+    .comp-tile-sir {
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      flex-shrink: 0;
+    }
+    .fund-logo {
+      width: 30px; height: 30px;
+      border-radius: 7px;
+      object-fit: cover;
+      background: #0b0d10;
+      border: 1px solid var(--stroke);
+      flex-shrink: 0;
+    }
+    .fund-info { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+    .fund-name {
+      font-weight: 500; font-size: 13px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .fund-price { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .fund-change { font-weight: 600; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+
+    @media (max-width: 900px) { .disc-row { flex-direction: column; } }
+    @media (max-width: 1100px) { .col-lg { display: none; } }
+    @media (max-width: 820px)  { .col-md { display: none; } }
+  </style>
+</head>
+<body>
+
+  <%- include('partials/appnav', { user: user, active: 'mixers' }) %>
+
+  <div class="max-w-[1500px] mx-auto px-6 py-8">
+
+    <div class="about-bar" role="note">
+      <span class="about-net"><span class="about-net-dot"></span>Devnet</span>
+      <span>Mixer runs on Solana devnet for now &mdash; every token and SOL balance here is a test asset, not real money.</span>
+      <span class="about-by">
+        Built by
+
+        <a href="https://x.com/notbhavit" target="_blank" rel="noopener" data-xcard="notbhavit">
+          Bhavit Rao
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M18.9 1.2h3.7l-8.1 9.2 9.5 12.6h-7.4l-5.8-7.6-6.7 7.6H.4l8.6-9.9L0 1.2h7.6l5.2 6.9zm-1.3 19.6h2L6.5 3.3H4.3z"/>
+          </svg>
+        </a>
+      </span>
+    </div>
+
+    <div class="flex flex-wrap items-end justify-between gap-4 mb-5">
+      <div>
+        <h1 class="text-[26px] font-semibold tracking-tight leading-tight">Markets</h1>
+        <p class="text-[13px] text-[var(--muted)] mt-0.5">
+          Long-term token baskets, settled on Solana devnet.
+
+          <a href="/meme" class="meme-pointer">
+            Short-lived bets are on Meme<% if (typeof liveMemes !== 'undefined' && liveMemes > 0) { %>
+            <span class="meme-pointer-live"><span class="meme-pointer-dot"></span><%= liveMemes %> live</span><% } %> &rarr;
+          </a>
+        </p>
+      </div>
+
+      <div class="flex items-stretch gap-2.5">
+        <div class="stat-tile">
+          <p class="text-[10px] uppercase tracking-wider text-[var(--dim)] font-medium">Mixers</p>
+          <p class="text-[17px] font-semibold num mt-0.5"><%= totals.mixers %></p>
+        </div>
+        <div class="stat-tile">
+          <p class="text-[10px] uppercase tracking-wider text-[var(--dim)] font-medium">24h Volume</p>
+          <p class="text-[17px] font-semibold num mt-0.5"><%= fmtSol(totals.volume24h) %> <span class="text-[12px] text-[var(--muted)] font-normal">SOL</span></p>
+        </div>
+        <div class="stat-tile col-md">
+          <p class="text-[10px] uppercase tracking-wider text-[var(--dim)] font-medium">Holders</p>
+          <p class="text-[17px] font-semibold num mt-0.5"><%= fmtNum(totals.holders) %></p>
+        </div>
+        <div class="stat-tile col-md">
+          <p class="text-[10px] uppercase tracking-wider text-[var(--dim)] font-medium">Trades</p>
+          <p class="text-[17px] font-semibold num mt-0.5"><%= fmtNum(totals.trades) %></p>
+        </div>
+      </div>
+    </div>
+
+    <%
+      var priced = mixers.filter(function (m) { return m.price != null; });
+      var gainers = priced.filter(function (m) { return m.changes['24h'] != null; })
+                          .slice().sort(function (a, b) { return b.changes['24h'] - a.changes['24h']; })
+                          .slice(0, 3);
+      var trending = mixers.slice().sort(function (a, b) { return b.volume24h - a.volume24h; })
+                           .filter(function (m) { return m.volume24h > 0; })
+                           .slice(0, 3);
+      var fresh = mixers.slice().sort(function (a, b) {
+                    return new Date(b.created_at) - new Date(a.created_at);
+                  }).slice(0, 3);
+
+      function esc(v) {
+        return String(v == null ? '' : v)
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+      }
+
+      function fundCard(m) {
+        var chg = m.changes['24h'];
+        var cls = chg == null ? 'flat' : (chg >= 0 ? 'up' : 'down');
+        var chgText = chg == null
+          ? (m.is_new ? '<span class="new-chip" title="Launched less than 24 hours ago">New</span>' : '—')
+          : (chg >= 0 ? '+' : '') + Number(chg).toFixed(2) + '%';
+        var img = m.image && m.image.trim()
+          ? m.image
+          : '/images/tokens/' + (m.tokens[0] ? m.tokens[0].address : 'none');
+
+        return '<div class="fund-card" data-href="/mixer/' + esc(m.mixer_id) + '">' +
+          '<img src="' + esc(img) + '" alt="" class="fund-logo">' +
+          '<div class="fund-info">' +
+            '<div class="fund-name">' + esc(m.name) + '</div>' +
+            '<div class="fund-price">' + (m.price == null ? 'pricing…' : '$' + fmtPrice(m.price)) + '</div>' +
+          '</div>' +
+          '<div class="fund-change ' + cls + '">' + chgText + '</div>' +
+        '</div>';
+      }
+    %>
+    <% if (mixers.length >= 3) { %>
+      <div class="disc-row flex gap-3.5 mb-5">
+        <% if (gainers.length) { %>
+          <div class="disc-col">
+            <div class="disc-head">Top Gainers <span class="disc-tag">24h</span></div>
+            <% gainers.forEach(function (m) { %><%- fundCard(m) %><% }); %>
+          </div>
+        <% } %>
+        <% if (trending.length) { %>
+          <div class="disc-col">
+            <div class="disc-head">Trending <span class="disc-tag">24h</span></div>
+            <% trending.forEach(function (m) { %><%- fundCard(m) %><% }); %>
+          </div>
+        <% } %>
+        <% if (fresh.length) { %>
+          <div class="disc-col">
+            <div class="disc-head">Newly Launched</div>
+            <% fresh.forEach(function (m) { %><%- fundCard(m) %><% }); %>
+          </div>
+        <% } %>
+      </div>
+    <% } %>
+
+    <% if (typeof competitions !== 'undefined' && competitions && competitions.length) { %>
+      <div class="mb-5">
+        <div class="flex items-baseline justify-between mb-2.5">
+          <div class="flex items-baseline gap-2">
+            <h2 class="text-[13px] font-semibold text-white">Competitions</h2>
+            <span class="text-[11px] text-[var(--muted)]">
+              <%= competitions.length %> <%= competitions.length === 1 ? 'contest' : 'contests' %>
+            </span>
+          </div>
+          <span class="text-[10.5px] text-[var(--muted)]">Ranked by return since inception</span>
+        </div>
+
+        <div class="comp-grid">
+          <% competitions.slice(0, 6).forEach(function (c) { %>
+            <a href="/competition/<%= c.rootId %>" class="comp-tile">
+              <div class="flex items-start gap-2.5">
+                <img src="<%= (c.image && c.image.trim()) ? c.image : '/images/tokens/none' %>"
+                     alt="" class="comp-tile-logo" loading="lazy">
+                <div class="min-w-0 flex-1">
+                  <div class="comp-tile-title"><%= c.title %></div>
+                  <div class="comp-tile-sub">
+                    <%= c.total %> baskets<% if (c.maxDepth > 1) { %> · <%= c.maxDepth %> deep<% } %>
+                  </div>
+                </div>
+              </div>
+
+              <div class="comp-tile-leader">
+                <% if (c.leader) { %>
+                  <span class="comp-tile-crown">&#9733;</span>
+                  <span class="comp-tile-name"><%= c.leader.name %></span>
+                  <span class="comp-tile-sir" style="color:<%= c.leader.sir >= 0 ? '#22c55e' : '#f6465d' %>">
+                    <%= (c.leader.sir >= 0 ? '+' : '') + Number(c.leader.sir).toFixed(2) %>%
+                  </span>
+                <% } else { %>
+                  <span class="comp-tile-name" style="color:var(--muted)">No results yet</span>
+                <% } %>
+              </div>
+            </a>
+          <% }); %>
+        </div>
+      </div>
+    <% } %>
+
+    <%
+      var cats = typeof categories !== 'undefined' ? categories : [];
+      var counts = typeof categoryCounts !== 'undefined' ? categoryCounts : {};
+      var activeCat = typeof category !== 'undefined' ? category : null;
+      var withCounts = cats.filter(function (c) { return counts[c.id]; });
+
+      var allCount = Object.keys(counts).reduce(function (s, k) { return s + counts[k]; }, 0);
+    %>
+    <% if (withCounts.length) { %>
+      <div class="flex items-center gap-1 flex-wrap mb-2.5">
+        <a href="/mixers?sort=<%= sort %>" class="cat-pill <%= !activeCat ? 'active' : '' %>">
+          All <span class="cat-count"><%= allCount %></span>
+        </a>
+        <% withCounts.forEach(function (c) { %>
+          <a href="/mixers?sort=<%= sort %>&category=<%= c.id %>"
+             class="cat-pill <%= activeCat === c.id ? 'active' : '' %>" title="<%= c.description %>">
+            <span class="cat-icon"><%= c.icon %></span><%= c.label %>
+            <span class="cat-count"><%= counts[c.id] %></span>
+          </a>
+        <% }); %>
+      </div>
+    <% } %>
+
+    <div class="flex flex-wrap items-center gap-3 mb-3">
+      <div class="flex items-center gap-1 flex-wrap">
+        <% SORT_TABS.forEach(function (t) { %>
+          <a href="/mixers?sort=<%= t.key %><%= activeCat ? '&category=' + activeCat : '' %>"
+             class="tab <%= sort === t.key ? 'active' : '' %>"><%= t.label %></a>
+        <% }); %>
+      </div>
+    </div>
+
+    <input id="search" type="text" class="hidden" autocomplete="off" aria-hidden="true" tabindex="-1">
+
+    <% if (!mixers.length) { %>
+
+      <div class="border border-[var(--stroke)] rounded-xl bg-[var(--panel)] py-20 text-center">
+        <div class="w-12 h-12 rounded-xl bg-[var(--accent)]/10 flex items-center justify-center mx-auto mb-4">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#7453E2" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/>
+          </svg>
+        </div>
+        <% if (activeCat) { %>
+          <%
+            var catLabel = activeCat;
+            for (var ei = 0; ei < cats.length; ei++) {
+              if (cats[ei].id === activeCat) { catLabel = cats[ei].label; break; }
+            }
+          %>
+          <h3 class="text-[15px] font-semibold">Nothing in <%= catLabel %> yet</h3>
+          <p class="text-[13px] text-[var(--muted)] mt-1.5 max-w-sm mx-auto leading-relaxed">
+            No mixer has been filed under this category. Other categories may
+            still have baskets in them.
+          </p>
+          <a href="/mixers?sort=<%= sort %>"
+             class="inline-flex items-center gap-1.5 mt-5 px-4 py-2 text-[13px] font-semibold
+                    bg-[var(--accent)] hover:bg-[#6344d1] text-white rounded-lg transition-colors">
+            Show all mixers
+          </a>
+        <% } else { %>
+          <h3 class="text-[15px] font-semibold">No mixers yet</h3>
+          <p class="text-[13px] text-[var(--muted)] mt-1.5 max-w-sm mx-auto leading-relaxed">
+            A mixer is a weighted basket of real tokens. Pick the tokens and the
+            split, and it deploys to Solana devnet in about twenty seconds.
+          </p>
+          <a href="/mixer/create"
+             class="inline-flex items-center gap-1.5 mt-5 px-4 py-2 text-[13px] font-semibold
+                    bg-[var(--accent)] hover:bg-[#6344d1] text-white rounded-lg transition-colors">
+            Create the first mixer
+          </a>
+        <% } %>
+      </div>
+    <% } else { %>
+
+      <div class="overflow-x-auto">
+        <table class="market-table">
+          <thead>
+            <tr>
+              <th style="width:34px">#</th>
+              <th style="min-width:240px">Mixer</th>
+              <th>Price</th>
+              <th class="col-md">5m</th>
+              <th class="col-md">1h</th>
+              <th>24h</th>
+              <th>Volume 24h</th>
+              <th class="col-lg">Trades</th>
+              <th>Holders</th>
+              <th class="col-lg">Assets</th>
+              <th class="col-lg" style="width:90px" title="Price history over the period shown beneath each line"><%= sparkLabel %></th>
+              <th class="col-lg">Last</th>
+            </tr>
+          </thead>
+          <tbody id="rows">
+            <% mixers.forEach(function (m, i) {
+                 var c24 = m.changes['24h'];
+                 var spark = sparkPath(m.sparkline, 80, 24);
+                 var sparkUp = m.sparkline.length > 1
+                   ? m.sparkline[m.sparkline.length - 1] >= m.sparkline[0] : true;
+
+                 var sparkFlat = true;
+                 if (m.sparkline && m.sparkline.length >= 8) {
+                   var sMin = Math.min.apply(null, m.sparkline);
+                   var sMax = Math.max.apply(null, m.sparkline);
+                   sparkFlat = !(sMin > 0 && (sMax - sMin) / sMin > 0.0005);
+                 }
+                 var searchBlob = (m.name + ' ' + m.ticker + ' ' +
+                   m.tokens.map(function (t) { return t.symbol; }).join(' ')).toLowerCase();
+            %>
+            <tr data-href="/mixer/<%= m.mixer_id %>" data-search="<%= searchBlob %>">
+              <td class="num text-[var(--dim)] text-[12px]"><%= i + 1 %></td>
+
+              <td>
+                <div class="flex items-center gap-2.5">
+                  <img src="<%= m.image && m.image.trim() ? m.image : '/images/tokens/' + (m.tokens[0] ? m.tokens[0].address : 'none') %>"
+                       alt="" class="w-8 h-8 rounded-lg border border-[var(--stroke)] bg-[#0b0d10] object-cover shrink-0">
+                  <div class="min-w-0">
+                    <div class="flex items-center gap-1.5">
+                      <span class="font-semibold text-[13.5px] truncate max-w-[180px]"><%= m.name %></span>
+                      <span class="pill"><%= m.ticker %></span>
+                      <%
+
+                        var rowCat = null;
+                        for (var ci = 0; ci < cats.length; ci++) {
+                          if (cats[ci].id === m.category) { rowCat = cats[ci]; break; }
+                        }
+                      %>
+                      <%
+                         if (rowCat && String(rowCat.label).toLowerCase() !== String(m.ticker || '').toLowerCase()) { %>
+                        <span class="pill" style="color:#9aa0a6"><%= rowCat.label %></span>
+                      <% } %>
+                      <% if (m.is_mine) { %>
+                        <span class="pill" style="color:#a78bfa;border-color:rgba(167,139,250,.3)">yours</span>
+                      <% } %>
+                      </div>
+                    <div class="flex items-center gap-1 mt-1">
+                      <% m.tokens.slice(0, 5).forEach(function (t) { %>
+                        <img src="/images/tokens/<%= t.address %>" alt="<%= t.symbol %>"
+                             title="<%= t.symbol %> · <%= (t.weight * 100).toFixed(0) %>%"
+                             class="token-chip" loading="lazy">
+                      <% }); %>
+                      <% if (m.tokens.length > 5) { %>
+                        <span class="text-[11px] text-[var(--dim)] ml-0.5">+<%= m.tokens.length - 5 %></span>
+                      <% } %>
+                    </div>
+                  </div>
+                </div>
+              </td>
+
+              <td class="num font-medium">
+                <% if (m.price !== null) { %>
+                  <span data-price="<%= m.mixer_id %>">$<%= fmtPrice(m.price) %></span>
+                  <% if (m.readiness && m.readiness.state === 'partial') { %>
+                    <span class="text-[#eab308] text-[10px] ml-0.5"
+                          title="<%= m.readiness.reason %>">partial</span>
+                  <% } %>
+                <% } else if (m.readiness && m.readiness.state === 'unpriceable') { %>
+                  <span class="na" title="<%= m.readiness.reason %>">not tradeable</span>
+                <% } else { %>
+                  <span class="text-[#a78bfa] text-[11px] font-normal"
+                        title="Waiting for the first price updates">pricing…</span>
+                <% } %>
+              </td>
+
+              <% ['5m', '1h'].forEach(function (tf) { var v = m.changes[tf]; %>
+                <td class="num col-md <%= v === null ? 'flat' : (v > 0 ? 'up' : (v < 0 ? 'down' : 'flat')) %>">
+                  <%= v === null ? '—' : fmtPct(v) %>
+                </td>
+              <% }); %>
+
+              <td class="num font-medium <%= c24 === null ? 'flat' : (c24 > 0 ? 'up' : (c24 < 0 ? 'down' : 'flat')) %>">
+                <% if (c24 === null && m.is_new) { %><span class="new-chip" title="Launched less than 24 hours ago">New</span><% } else { %><%= c24 === null ? '—' : fmtPct(c24) %><% } %>
+              </td>
+
+              <td class="num">
+                <% if (m.volume24h > 0) { %>
+                  <%= fmtSol(m.volume24h) %> <span class="text-[var(--dim)] text-[11px]">SOL</span>
+                <% } else { %>
+                  <span class="na">0</span>
+                <% } %>
+              </td>
+
+              <td class="num col-lg <%= m.trades ? '' : 'na' %>"><%= fmtNum(m.trades) %></td>
+              <td class="num <%= m.holders ? '' : 'na' %>"><%= fmtNum(m.holders) %></td>
+              <td class="num col-lg text-[var(--muted)]"><%= m.token_count %></td>
+
+              <td class="col-lg">
+                <% if (spark && !sparkFlat) { %>
+                  <svg width="80" height="24" viewBox="0 0 80 24" fill="none" class="block">
+                    <path d="<%= spark %>" stroke="<%= sparkUp ? '#22c55e' : '#f6465d' %>"
+                          stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                <% } else { %>
+                  <span class="na">—</span>
+                <% } %>
+              </td>
+
+              <td class="num col-lg text-[12px] text-[var(--muted)]">
+                <%= ago(m.lastTrade) || '—' %>
+              </td>
+            </tr>
+            <% }); %>
+          </tbody>
+        </table>
+
+        <p id="noResults" class="hidden text-center text-[13px] text-[var(--muted)] py-14">
+          No mixers match that search.
+        </p>
+      </div>
+    <% } %>
+  </div>
+
+  <script>
+
+    document.querySelectorAll('#rows tr, .fund-card').forEach(function (el) {
+      el.addEventListener('click', function () {
+        if (el.dataset.href) window.location.href = el.dataset.href;
+      });
+    });
+
+    (function () {
+      var input = document.getElementById('search');
+      if (!input) return;
+      var rows = Array.prototype.slice.call(document.querySelectorAll('#rows tr'));
+      var empty = document.getElementById('noResults');
+
+      input.addEventListener('input', function () {
+        var q = input.value.trim().toLowerCase();
+        var shown = 0;
+        rows.forEach(function (tr) {
+          var hit = !q || tr.dataset.search.indexOf(q) !== -1;
+          tr.hidden = !hit;
+          if (hit) shown++;
+        });
+        if (empty) empty.classList.toggle('hidden', shown > 0);
+      });
+    })();
+
+    (function () {
+      if (typeof io === 'undefined') return;
+      var socket = io();
+
+      function fmt(n) {
+        n = Number(n);
+        if (!isFinite(n) || n <= 0) return '0.00';
+        if (n >= 1000) return n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+        if (n >= 1) return n.toFixed(2);
+        if (n >= 0.01) return n.toFixed(4);
+        if (n >= 0.000001) return n.toFixed(8).replace(/0+$/, '');
+        return n.toExponential(2);
+      }
+
+      socket.on('mixer:price', function (d) {
+        var el = document.querySelector('[data-price="' + d.mixerId + '"]');
+        if (!el) return;
+
+        var prev = parseFloat(el.dataset.last || '0');
+        el.textContent = '$' + fmt(d.price);
+        el.dataset.last = d.price;
+
+        if (prev && d.price !== prev) {
+          el.style.transition = 'none';
+          el.style.color = d.price > prev ? '#22c55e' : '#f6465d';
+          requestAnimationFrame(function () {
+            el.style.transition = 'color .7s ease';
+            el.style.color = '';
+          });
+        }
+      });
+    })();
+  </script>
+  <%- include('partials/xcard') %>
+</body>
+</html>

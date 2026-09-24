@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= status %> · Mixer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { colors: {
+        primary: '#7453E2',
+        primaryStroke: '#21262d',
+        textSecondary: '#9aa0a6',
+        textTertiary: '#5a616b',
+      } } }
+    };
+  </script>
+</head>
+<body class="bg-[#0b0d10] text-gray-200 min-h-screen flex flex-col">
+
+  <% if (typeof user !== 'undefined' && user) { %>
+    <%- include('partials/appnav', { user: user, active: '' }) %>
+  <% } %>
+
+  <main class="flex-1 flex items-center justify-center px-6 py-16">
+    <div class="w-full max-w-[420px] text-center">
+
+      <p class="text-[64px] leading-none font-bold tracking-tight"
+         style="color:#7453E2"><%= status %></p>
+
+      <h1 class="text-lg font-semibold text-white mt-3"><%= title %></h1>
+      <p class="text-[13px] text-textSecondary mt-2 leading-relaxed"><%= message %></p>
+
+      <div class="flex items-center justify-center gap-2 mt-6">
+        <a href="/mixers"
+           class="text-[12.5px] font-semibold px-4 py-2 rounded-lg bg-[#7453E2] text-white hover:bg-[#6344d1] transition-colors">
+          Browse mixers
+        </a>
+        <button type="button" onclick="history.back()"
+                class="text-[12.5px] font-semibold px-4 py-2 rounded-lg border border-primaryStroke text-textSecondary hover:text-white hover:border-[#3a4150] transition-colors">
+          Go back
+        </button>
+      </div>
+
+      <% if (typeof detail !== 'undefined' && detail) { %>
+        <p class="text-[11px] text-textTertiary mt-6 font-mono break-all"><%= detail %></p>
+      <% } %>
+    </div>
+  </main>
+
+</body>
+</html>

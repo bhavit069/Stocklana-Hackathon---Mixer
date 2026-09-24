@@ -1,0 +1,3280 @@
+<%
+
+  function fmtPrice(v) {
+    var n = Number(v);
+    if (!isFinite(n) || n <= 0) return '0';
+    if (n >= 1) return n.toFixed(2);
+    if (n >= 0.01) return n.toFixed(4);
+    if (n >= 0.000001) return n.toFixed(8).replace(/0+$/, '');
+    return n.toExponential(2);
+  }
+%>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= mixer.name %> - Trading</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.2/dist/lightweight-charts.standalone.production.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      background: #0b0d10;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    }
+
+    /* The creator's "read more" link under a thesis. */
+    .thesis-site {
+      display: inline-flex; align-items: center; gap: 5px;
+      max-width: 100%;
+      font-size: 11.5px; font-weight: 600;
+      color: #a78bfa;
+      transition: color .15s ease;
+    }
+    .thesis-site:hover { color: #fff; }
+
+    /* ---- Meme mode countdown ----
+       Written as real CSS rather than Tailwind utilities: these classes are
+       toggled from JS as the clock crosses thresholds, and the Tailwind CDN
+       only generates classes it can see in the static HTML at load. A utility
+       that appears solely inside a JS string is never emitted, so toggling it
+       silently does nothing.
+       Warm, like the /meme page: a meme run should never read as a mixer. */
+    .meme-chip {
+      border: 1px solid rgba(255, 176, 32, .45);
+      background: rgba(255, 176, 32, .12);
+      color: #ffcf66;
+      font-variant-numeric: tabular-nums;
+      transition: color .2s ease, border-color .2s ease, background .2s ease;
+    }
+    /* Under an hour: this is now a countdown, not a date. */
+    .meme-chip.is-soon {
+      border-color: rgba(234, 179, 8, .5);
+      background: rgba(234, 179, 8, .14);
+      color: #fde047;
+    }
+    /* Under five minutes: pulses so it is noticeable in peripheral vision. */
+    .meme-chip.is-urgent {
+      border-color: rgba(246, 70, 93, .55);
+      background: rgba(246, 70, 93, .16);
+      color: #ff8a9b;
+      animation: memePulse 1s ease-in-out infinite;
+    }
+    .meme-chip.is-done {
+      border-color: #2C2C2C;
+      background: rgba(255, 255, 255, .04);
+      color: #7d8590;
+      animation: none;
+    }
+    @keyframes memePulse {
+      0%, 100% { opacity: 1; }
+      50%      { opacity: .55; }
+    }
+    /* Respect a reduced-motion preference: the colour still conveys urgency. */
+    @media (prefers-reduced-motion: reduce) {
+      .meme-chip.is-urgent { animation: none; }
+    }
+
+    /* Hide scrollbar but keep functionality */
+    .hide-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    /* Children of a scrolling flex column keep their own height instead of
+       shrinking to fit it -- the chart's height is set explicitly and must
+       not be squeezed when the tabs below it are long. */
+    .col-scroll > * { flex-shrink: 0; }
+
+    .hide-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    /* Resizable chart container */
+    .resizable-chart {
+      position: relative;
+      min-height: 300px;
+      height: 450px;
+    }
+
+    /* Chart Height Adjuster - Separate visible div */
+    .chart-adjuster {
+        height: 7px;
+        background: #1e1e1e;
+        cursor: ns-resize;
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.2s;
+    }
+
+    .chart-adjuster:hover {
+      background: #7453E2;
+    }
+
+    .chart-adjuster::after {
+      content: '⋮';
+      color: #8B949E;
+      font-size: 20px;
+      letter-spacing: 2px;
+      transform: rotate(90deg);
+    }
+
+    .chart-adjuster:hover::after {
+      color: #fff;
+    }
+
+    /* Tab styles */
+    .tab-button {
+      transition: all 0.2s;
+    }
+    .tab-button.active {
+      color: #7453E2;
+      border-bottom: 2px solid #7453E2;
+    }
+    .tab-button:hover {
+      color: #C9D1D9;
+    }
+
+    /* Price display */
+    .price-positive {
+      color: #22c55e;
+    }
+    .price-negative {
+      color: #f6465d;
+    }
+    /* Applied by the timeframe row for an unknown change. It had no rule, so
+       a dash inherited whatever colour was in scope. */
+    .price-neutral {
+      color: #9aa0a6;
+    }
+
+    /* Value that just changed, briefly lit so a moving number is noticed
+       without having to watch for it. */
+    .stat-flash {
+      animation: statFlash .6s ease-out;
+    }
+    @keyframes statFlash {
+      from { background-color: rgba(116, 83, 226, .35); }
+      to   { background-color: transparent; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .stat-flash { animation: none; }
+    }
+
+    /* Performance chart legend */
+    .performance-legend-item {
+      padding: 6px 10px;
+      background: #0b0d10;
+      border: 1px solid #21262d;
+      border-radius: 6px;
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+
+    .performance-legend-item:hover {
+      border-color: #7453E2;
+    }
+
+    /* Stat box styling */
+    .stat-item {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 3px;
+      padding: 2px 4px;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      font-weight: 400;
+      line-height: 16px;
+      color: #8B949E;
+    }
+
+    .stat-value {
+      font-size: 13px;
+      font-weight: 400;
+      line-height: 17px;
+      color: #e4e4e7;
+      font-variant-numeric: tabular-nums;
+    }
+
+	.pie-chart-container {
+		display: flex;
+		justify-content: center;
+		height: 250px;
+	}
+
+	.token-allocation-row {
+		background-color: #16171D;
+	}
+
+	.token-name {
+		display: flex;
+		font-size: 13.5px;
+	}
+
+	.token-verified {
+		position: relative;
+    	top: 2.4px;
+    	color: #82e58a;
+    	left: 0.3rem;
+	}
+
+	.token-address {
+		font-size: 12.5px;
+		display: flex;
+		align-items: center;
+		gap: 5px;
+	}
+
+	.token-price {
+		font-size: 13.5px;
+		font-weight: 600;
+	}
+
+	.token-percentage {
+		font-size: 12px;
+	}
+
+	/* Copy / explorer controls next to the mint address. Kept dim until the
+	   row is hovered so the list still reads as a clean column of tokens. */
+	.token-addr-action {
+		color: #6b7280;
+		opacity: 0;
+		transition: opacity .15s, color .15s;
+		display: inline-flex;
+		align-items: center;
+		line-height: 0;
+	}
+
+	.token-allocation-row:hover .token-addr-action {
+		opacity: 1;
+	}
+
+	.token-addr-action:hover {
+		color: #fff;
+	}
+
+	.token-addr-action.copied {
+		opacity: 1;
+		color: #82e58a;
+	}
+
+	.footer-title {
+		font-size: 18px;
+		font-weight: 500;
+	}
+
+	/* Competing-thesis cards. Same visual language as the .fund-card rows on
+	   /mixers, so a basket looks like a basket wherever it appears. */
+	.fund-card-t {
+		background: #14171c;
+		border: 1px solid #21262d;
+		border-radius: 12px;
+		padding: 12px;
+		cursor: pointer;
+		transition: background .15s ease, border-color .15s ease;
+	}
+	.fund-card-t:hover { background: #191d24; border-color: #2f3742; }
+
+	/* ===== Competition panel =====
+	   Hand-written rather than Tailwind utilities because several of these
+	   classes are applied to markup that JS rebuilds or toggles, and the Play
+	   CDN only compiles classes present in the static HTML at load. */
+
+	.comp-card {
+		border: 1px solid #1f242c;
+		border-radius: 7px;
+		background: #0f1216;
+		padding: 9px 10px;
+	}
+	.comp-card-btn {
+		display: block;
+		cursor: pointer;
+		transition: border-color .15s ease, background .15s ease;
+	}
+	.comp-card-btn:hover { border-color: rgba(116, 83, 226, .5); background: #12151b; }
+
+	.comp-eyebrow {
+		font-size: 9.5px;
+		font-weight: 700;
+		letter-spacing: .06em;
+		text-transform: uppercase;
+		color: #6b7280;
+	}
+
+	/* The clamp is what makes "View more" mean something. Three lines is the
+	   most a 300px column can carry before it stops being scannable. */
+	.comp-body {
+		font-size: 11.5px;
+		line-height: 1.55;
+		color: #a8b0ba;
+		display: -webkit-box;
+		-webkit-line-clamp: 3;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+	}
+
+	.comp-more {
+		margin-top: 7px;
+		display: inline-flex;
+		align-items: center;
+		gap: 3px;
+		font-size: 10.5px;
+		font-weight: 600;
+		color: #a78bfa;
+		transition: color .15s ease;
+	}
+	.comp-more:hover { color: #c4b5fd; }
+
+	.comp-link {
+		font-size: 10.5px;
+		font-weight: 600;
+		color: #a78bfa;
+	}
+
+	/* Rank chip. Gold only for an actual lead -- if every state glows, none
+	   of them signals anything. */
+	.comp-rank {
+		display: inline-flex;
+		align-items: center;
+		gap: 3px;
+		font-size: 9.5px;
+		font-weight: 700;
+		letter-spacing: .04em;
+		text-transform: uppercase;
+		padding: 2px 6px;
+		border-radius: 4px;
+		color: #9aa0a6;
+		background: rgba(255, 255, 255, .04);
+		border: 1px solid #23272f;
+	}
+	.comp-rank.is-leader {
+		color: #facc15;
+		background: rgba(250, 204, 21, .1);
+		border-color: rgba(250, 204, 21, .32);
+	}
+
+	/* Standings rows */
+	.comp-row {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		width: 100%;
+		padding: 5px 10px;
+		border-top: 1px solid #191d23;
+		transition: background .12s ease;
+	}
+	.comp-row:hover { background: #151920; }
+	.comp-row.is-me { background: rgba(116, 83, 226, .09); }
+	.comp-row.is-me:hover { background: rgba(116, 83, 226, .15); }
+	.comp-row-all { justify-content: center; }
+
+	.comp-pos {
+		width: 15px;
+		flex-shrink: 0;
+		font-size: 10px;
+		font-weight: 700;
+		text-align: center;
+		color: #5a616b;
+		font-variant-numeric: tabular-nums;
+	}
+	.comp-pos.is-first { color: #facc15; }
+
+	.comp-name {
+		font-size: 11.5px;
+		color: #d1d5db;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		max-width: 130px;
+	}
+	.comp-row.is-me .comp-name { color: #fff; font-weight: 600; }
+
+	.comp-tag {
+		flex-shrink: 0;
+		font-size: 8.5px;
+		font-weight: 700;
+		letter-spacing: .05em;
+		padding: 1px 3px;
+		border-radius: 3px;
+		color: #7d8590;
+		background: rgba(255, 255, 255, .05);
+	}
+
+	.comp-chg { font-size: 11px; font-weight: 600; flex-shrink: 0; }
+
+	.comp-cta {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
+		padding: 8px 10px;
+		border-radius: 7px;
+		border: 1px dashed rgba(116, 83, 226, .45);
+		background: rgba(116, 83, 226, .07);
+		font-size: 11.5px;
+		font-weight: 600;
+		color: #a78bfa;
+		text-align: center;
+		transition: background .15s ease, border-color .15s ease, color .15s ease;
+	}
+	.comp-cta:hover {
+		background: rgba(116, 83, 226, .16);
+		border-color: rgba(116, 83, 226, .8);
+		border-style: solid;
+		color: #c4b5fd;
+	}
+
+	/* Thesis modal: the full narrative, with room to actually read it. */
+	#thesisModal { display: none; }
+	#thesisModal.is-open { display: flex; }
+
+	/* ===== Chart toolbar =====
+	   Hand-written because the popovers are toggled from JS, and the Tailwind
+	   Play CDN only compiles classes it can see in the static HTML. */
+
+	.chart-toolbar {
+		display: flex;
+		align-items: center;
+		gap: 2px;
+		height: 36px;
+		padding: 0 8px;
+		background: #0b0d10;
+		border-bottom: 1px solid #21262d;
+	}
+
+	.ct-sep {
+		width: 1px;
+		height: 16px;
+		margin: 0 6px;
+		background: #21262d;
+	}
+
+	.ct-menu { position: relative; }
+
+	.ct-trigger {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		height: 24px;
+		padding: 0 7px;
+		border-radius: 4px;
+		font-size: 12px;
+		font-weight: 600;
+		color: #c9d1d9;
+		transition: background .12s ease, color .12s ease;
+	}
+	.ct-trigger:hover { background: #1c2128; color: #fff; }
+	.ct-trigger.is-open { background: #1c2128; color: #fff; }
+
+	.ct-glyph { width: 15px; height: 15px; flex-shrink: 0; }
+	.ct-caret { width: 10px; height: 10px; flex-shrink: 0; opacity: .5; }
+
+	.ct-pop {
+		display: none;
+		position: absolute;
+		top: calc(100% + 5px);
+		left: 0;
+		z-index: 60;
+		min-width: 168px;
+		padding: 4px;
+		border-radius: 7px;
+		border: 1px solid #2c333d;
+		background: #14181e;
+		box-shadow: 0 10px 28px rgba(0, 0, 0, .6);
+	}
+	.ct-pop.is-open { display: block; }
+
+	.ct-group {
+		padding: 6px 8px 3px;
+		font-size: 9.5px;
+		font-weight: 700;
+		letter-spacing: .06em;
+		text-transform: uppercase;
+		color: #6b7280;
+	}
+
+	.ct-item {
+		display: block;
+		width: 100%;
+		padding: 6px 8px;
+		border-radius: 4px;
+		text-align: left;
+		font-size: 12px;
+		color: #c9d1d9;
+		white-space: nowrap;
+		transition: background .1s ease, color .1s ease;
+	}
+	.ct-item:hover { background: #222a33; color: #fff; }
+
+	/* The active row is filled, matching the reference: a checkmark is easy
+	   to miss at this size, a filled row is not. */
+	.ct-item.is-active { background: #2563eb; color: #fff; }
+	.ct-item.is-active:hover { background: #2563eb; }
+
+	.ct-item-icon { display: flex; align-items: center; gap: 8px; }
+
+	.ct-brand {
+		margin-left: auto;
+		padding-right: 2px;
+		font-size: 10.5px;
+		font-weight: 500;
+		color: #4b525c;
+		letter-spacing: .01em;
+		user-select: none;
+		white-space: nowrap;
+	}
+
+	.mixer-name {
+		font-size: 18px;
+		font-weight: 500;
+	}
+
+	.mixer-ticker {
+		position: relative;
+		font-size: 17px;
+		color: #62677c;
+		font-weight: 500;
+	}
+
+	.mixer-ticker:hover {
+		color: #787b88;
+	}
+
+	/* ---- Your Position tab ---- */
+	.pos-panel > .pos-loading, .pos-panel > .pos-empty, .pos-panel > .pos-held { display: none; }
+	.pos-panel[data-state="loading"] > .pos-loading { display: block; }
+	.pos-panel[data-state="empty"]   > .pos-empty   { display: flex; }
+	.pos-panel[data-state="held"]    > .pos-held    { display: block; }
+	.pos-panel[data-state="loading"] > .pos-orders  { display: none; }
+	.pos-kpi { display: flex; flex-direction: column; gap: 3px; padding: 14px 16px; border-right: 1px solid #21262d; min-width: 0; }
+	.pos-kpi:last-child { border-right: 0; }
+	.pos-label { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: #6b7280; font-weight: 600; }
+	.pos-value { font-size: 17px; font-weight: 600; color: #fff; font-variant-numeric: tabular-nums; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.pos-unit { font-size: 12px; color: #9ca3af; font-weight: 500; }
+	.pos-sub { font-size: 11px; color: #7d8590; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.pos-bar { display: block; height: 4px; margin-top: 6px; border-radius: 999px; background: #1a1d23; overflow: hidden; }
+	.pos-bar > span { display: block; height: 100%; background: #7453E2; border-radius: 999px; transition: width .3s ease; }
+	.pos-section-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 16px 8px; font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: #9ca3af; font-weight: 600; }
+	.pos-table th { padding: 6px 16px; font-size: 10px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid #21262d; }
+	.pos-table td { padding: 9px 16px; font-size: 12px; border-bottom: 1px solid #161a20; font-variant-numeric: tabular-nums; }
+	.pos-table tr:last-child td { border-bottom: 0; }
+	.pos-dl { padding: 0 16px 10px; }
+	.pos-dl > div { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid #161a20; font-size: 12px; }
+	.pos-dl > div:last-child { border-bottom: 0; }
+	.pos-dl dt { color: #7d8590; }
+	.pos-dl dd { color: #e5e7eb; font-variant-numeric: tabular-nums; text-align: right; }
+
+	.mixer-image {
+		border: 3px solid #7453e2;
+    	border-radius: 6px;
+	}
+
+	.timeframe-container {
+		display: flex;
+		width: 100%;
+		height: 3.8rem;
+    border-bottom: 1px solid #1f2937;
+	}
+
+	/* .timeframe-container sets display:flex, and this stylesheet is parsed
+	   after the Tailwind CDN, so a bare .hidden would lose the tie on equal
+	   specificity and the element would never actually hide. */
+	.timeframe-container.hidden {
+		display: none;
+	}
+
+	.timeframe-text {
+		font-size: 13px;
+		font-weight: 500;
+		color: #8B949E;
+	}
+
+	.bg-primaryStroke {
+      background: #1f232e;
+    }
+
+    .border-primaryStroke {
+      border-color: #23272f;
+    }
+
+    .border-secondaryStroke {
+      border-color: #23272f;
+    }
+
+    .text-textPrimary {
+      color: #ffffff;
+    }
+
+    .text-textTertiary {
+      color: #7c8596;
+    }
+
+    .text-textSecondary {
+      color: #9ca3af;
+    }
+
+    .bg-primaryBlue {
+      background: #7453e2;
+    }
+
+    .price-positive {
+      color: #82e58a;
+    }
+
+    .price-negative {
+      color: #f6465d;
+    }
+
+    /* Gain/loss tokens for the position strip.
+       Hand-written like the rest of this block: chart.ejs has no
+       tailwind.config, so these names only exist because they are defined
+       here. Matching the green already used by .price-positive and the red by
+       .price-negative, so one colour means one thing across the page. */
+    .text-increase {
+      color: #82e58a;
+    }
+
+    .text-decrease {
+      color: #f6465d;
+    }
+
+    .text-increaseHover {
+      color: #a0f0a7;
+    }
+
+    .hover\:text-increaseHover:hover {
+      color: #a0f0a7;
+    }
+
+    /* The CDN cannot build a hover variant of a class it does not know about
+       (chart.ejs has no tailwind.config), so the ones this page relies on are
+       written out. */
+    .hover\:bg-primaryStroke:hover {
+      background: #1f232e;
+    }
+
+    .hover\:bg-primaryStrokeHalf:hover {
+      background: rgba(31, 35, 46, .5);
+    }
+
+    .group:hover .group-hover\:text-textSecondary {
+      color: #9ca3af;
+    }
+
+    .group:hover .group-hover\:text-increaseHover {
+      color: #a0f0a7;
+    }
+
+    /* A flat or unknown figure is neither a gain nor a loss. */
+    .text-flat {
+      color: #9ca3af;
+    }
+
+	.user_X {
+		transition: all 0.2s ease-in-out;
+	}
+
+	.user_X:hover  {
+		text-decoration: underline;
+	}
+  </style>
+</head>
+<body class="bg-[#0b0d10] text-gray-200 h-screen flex flex-col overflow-hidden">
+
+  <%- include('partials/appnav', { user: user, active: '' }) %>
+
+  <div class="flex-1 min-h-0 overflow-hidden">
+    <div class="flex h-full">
+
+      <div class="flex-1 min-w-0 flex flex-col overflow-y-auto hide-scrollbar col-scroll">
+
+        <div class="flex max-h-[80px] min-h-[80px] flex-row items-center justify-start gap-5 border-b border-[#21262d] pl-4 pr-4 bg-[#0b0d10] sticky top-0 z-10">
+
+          <div class="flex flex-shrink-0 flex-row items-center justify-center gap-2.5">
+            <img src="<%= (mixer.image && mixer.image.trim()) ? mixer.image : '/images/tokens/' + (allocations[0] ? allocations[0].token_address : 'none') %>"
+                 alt="<%= mixer.ticker %>" class="w-11 h-11 mixer-image object-cover">
+            <div class="flex flex-col items-start justify-start gap-0">
+              <div class="flex items-center gap-1">
+                <span class="mixer-name leading-5 tracking-[-0.02em] text-white"><%= mixer.name %></span>
+                <span class="mixer-ticker ml-1">
+                  <%= mixer.ticker %>
+                  <button type="button" style="padding-top: 1.3px;" title="Copy mixer address"
+                          onclick="copyToClipboard('<%= mixer.mixer_id %>')">
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" class="shrink-0"><g clip-path="url(#clip0_11927_145082)"><path d="M5.3335 5.3335V3.46683C5.3335 2.72009 5.3335 2.34672 5.47882 2.06151C5.60665 1.81063 5.81063 1.60665 6.06151 1.47882C6.34672 1.3335 6.72009 1.3335 7.46683 1.3335H12.5335C13.2802 1.3335 13.6536 1.3335 13.9388 1.47882C14.1897 1.60665 14.3937 1.81063 14.5215 2.06151C14.6668 2.34672 14.6668 2.72009 14.6668 3.46683V8.5335C14.6668 9.28023 14.6668 9.6536 14.5215 9.93882C14.3937 10.1897 14.1897 10.3937 13.9388 10.5215C13.6536 10.6668 13.2802 10.6668 12.5335 10.6668H10.6668M3.46683 14.6668H8.5335C9.28023 14.6668 9.6536 14.6668 9.93882 14.5215C10.1897 14.3937 10.3937 14.1897 10.5215 13.9388C10.6668 13.6536 10.6668 13.2802 10.6668 12.5335V7.46683C10.6668 6.72009 10.6668 6.34672 10.5215 6.06151C10.3937 5.81063 10.1897 5.60665 9.93882 5.47882C9.6536 5.3335 9.28023 5.3335 8.5335 5.3335H3.46683C2.72009 5.3335 2.34672 5.3335 2.06151 5.47882C1.81063 5.60665 1.60665 5.81063 1.47882 6.06151C1.3335 6.34672 1.3335 6.72009 1.3335 7.46683V12.5335C1.3335 13.2802 1.3335 13.6536 1.47882 13.9388C1.60665 14.1897 1.81063 14.3937 2.06151 14.5215C2.34672 14.6668 2.72009 14.6668 3.46683 14.6668Z" stroke="currentColor" stroke-width="1.67" stroke-linecap="round" stroke-linejoin="round"></path></g><defs><clipPath id="clip0_11927_145082"><rect width="16" height="16" fill="white"></rect></clipPath></defs></svg>
+                  </button>
+
+                  <button type="button" style="padding-top: 1.3px;" title="Share this mixer"
+                          id="shareBtn" onclick="shareMixer(this)">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
+                      <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                      <path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/>
+                    </svg>
+                  </button>
+                </span>
+                <a href="/mixer/<%= mixer.mixer_id %>/info"
+                   class="text-[11px] px-2 py-0.5 rounded-md bg-white/5 border border-[#21262d] text-gray-400 hover:text-white hover:border-[#7453E2] transition-colors ml-1">Stats</a>
+
+                <% if (typeof memeLife !== 'undefined' && memeLife) { %>
+
+                  <span id="memeChip"
+                        class="meme-chip ml-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-bold"
+                        data-state="<%= memeLife.state %>"
+                        data-expires="<%= memeLife.expiresAt %>">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                      <circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path>
+                    </svg>
+                    <span id="memeChipText">—</span>
+                  </span>
+                <% } %>
+              </div>
+              <div class="flex items-center gap-2 mt-0.5 flex-wrap">
+                <span class="text-[11px] text-[#7d8590]"><%= allocations.length %> assets</span>
+                <span class="text-[11px] text-[#3d434b]">·</span>
+                <%
+
+                  var ageText = '';
+                  if (mixer.created_at) {
+                    var ageMs = Date.now() - new Date(mixer.created_at).getTime();
+                    var mins = Math.floor(ageMs / 60000);
+                    var hrs = Math.floor(mins / 60);
+                    var days = Math.floor(hrs / 24);
+                    var mos = Math.floor(days / 30);
+                    var yrs = Math.floor(days / 365);
+                    if (yrs >= 1) ageText = yrs + 'y ago';
+                    else if (mos >= 1) ageText = mos + 'mo ago';
+                    else if (days >= 1) ageText = days + 'd ago';
+                    else if (hrs >= 1) ageText = hrs + 'h ago';
+                    else ageText = Math.max(1, mins) + 'm ago';
+                  }
+                %>
+                <span class="text-[11px] font-medium" style="color:#22c55e"><%= ageText %></span>
+
+                <% if (typeof creatorHandle !== 'undefined' && creatorHandle) { %>
+                  <span class="text-[11px] text-[#3d434b]">·</span>
+
+                  <a class="user_X text-[11px] text-[#2fbaff] font-medium"
+                     data-xcard="<%= creatorHandle %>"
+                     href="https://x.com/<%= creatorHandle %>" target="_blank" rel="noopener">@<%= creatorHandle %></a>
+                <% } %>
+
+                <%
+
+                  var hasSir = typeof sir !== 'undefined' && sir !== null;
+                  var hasSirBase = typeof sirBase !== 'undefined' && sirBase !== null;
+                %>
+                <%
+
+                  var sirTip = 'SIR (Since Inception Return)';
+                  if (hasSirBase) {
+                    sirTip += ' — created at $' + fmtPrice(sirBase);
+                  }
+                %>
+                <% if (hasSir || hasSirBase) { %>
+                  <span class="text-[11px] text-[#3d434b]">·</span>
+                  <span id="sir-stat" class="text-[11px] font-semibold cursor-help"
+                        style="color:<%= !hasSir ? '#9ca3af' : sir >= 0 ? '#22c55e' : '#f6465d' %>"
+                        data-tip="<%= sirTip %>"
+                        aria-label="Since Inception Return"><%= hasSir ? (sir >= 0 ? '+' : '') + Number(sir).toFixed(2) + '%' : '—' %></span>
+                <% } %>
+
+                <% if (mixer.parent_mixer_id || mixer.parent_name) { %>
+                  <span class="text-[10px] font-bold px-1.5 py-[1px] rounded"
+                        style="color:#a78bfa;background:rgba(167,139,250,.12);border:1px solid rgba(167,139,250,.32)">
+                    REMIXED
+                  </span>
+                <% } %>
+              </div>
+            </div>
+          </div>
+
+          <div class="stat-item">
+            <span class="stat-label">Price</span>
+
+            <span class="stat-value" style="font-size: 18px;"><%= (typeof mixerPrice !== 'undefined' && mixerPrice) ? '$' : '' %><span id="live-mixer-price"><%= (typeof mixerPrice !== 'undefined' && mixerPrice) ? fmtPrice(mixerPrice) : '—' %></span></span>
+          </div>
+
+          <div class="stat-item">
+            <span class="stat-label">24h</span>
+            <%
+              var c24 = null;
+              try { c24 = timeframes.timeframes['24h'].change_percent; } catch (e) {}
+              var c24cls = c24 === null || c24 === undefined ? '' : (c24 > 0 ? 'price-positive' : (c24 < 0 ? 'price-negative' : ''));
+            %>
+            <span class="stat-value <%= c24cls %>" id="change-24h-stat">
+              <%= (c24 === null || c24 === undefined) ? '0.00%' : ((c24 >= 0 ? '+' : '') + Number(c24).toFixed(2) + '%') %>
+            </span>
+          </div>
+
+          <div class="stat-item">
+            <span class="stat-label">Volume 24h</span>
+            <span class="stat-value"><span id="volume-24h"><%= (typeof stats !== 'undefined' && stats && stats.volume24h) ? Number(stats.volume24h).toFixed(3) : '0.000' %></span> <span class="text-[#7d8590] text-[11px]">SOL</span></span>
+          </div>
+
+          <div class="stat-item">
+            <span class="stat-label">Holders</span>
+            <span class="stat-value"><span id="holders-stat"><%= (typeof stats !== 'undefined' && stats && stats.holders != null) ? stats.holders : 0 %></span></span>
+          </div>
+
+          <div class="stat-item">
+            <span class="stat-label">Risk Score</span>
+            <span class="stat-value">
+              <% if (typeof riskScore !== 'undefined' && riskScore !== null) { %>
+                <%
+                  var rsBand = riskScore <= 35 ? { label: 'Low risk', colour: '#22c55e' }
+                             : riskScore <= 60 ? { label: 'Medium risk', colour: '#eab308' }
+                             : { label: 'High risk', colour: '#f6465d' };
+                  var rsTitle = rsBand.label + ' (' + riskScore + '/100, lower is safer)';
+                  var rsRugged = (typeof riskDetail !== 'undefined' && riskDetail && riskDetail.rugged) || [];
+                  if (rsRugged.length) {
+                    rsTitle += ' — flagged as rugged: ' + rsRugged.join(', ');
+                  }
+                  if (typeof riskCoverage !== 'undefined' && riskCoverage > 0 && riskCoverage < 100) {
+                    rsTitle += ' — rated across ' + riskCoverage + '% of the basket';
+                  }
+                %>
+                <span id="risk-stat" class="font-bold" style="color: <%= rsBand.colour %>"
+                      title="<%= rsTitle %>"><%= riskScore %><% if (rsRugged.length) { %> <span aria-label="Contains a token flagged as rugged">&#9888;</span><% } %></span>
+              <% } else { %>
+                <span id="risk-stat" class="text-[#5a616b]" title="No constituent could be rated">&mdash;</span>
+              <% } %>
+            </span>
+          </div>
+
+          <a href="/mixer/<%= mixer.mixer_id %>/remix"
+             class="ml-auto shrink-0 inline-flex items-center gap-1.5 px-3 py-[7px] rounded-lg
+                    text-[12px] font-semibold bg-[#7453E2]/12 border border-[#7453E2]/40
+                    text-[#a78bfa] hover:bg-[#7453E2] hover:text-white hover:border-[#7453E2]
+                    transition-colors"
+             title="Disagree with this basket? Build your own version of it.">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M16 3h5v5"/><path d="M4 20L21 3"/><path d="M21 16v5h-5"/>
+              <path d="M15 15l6 6"/><path d="M4 4l5 5"/>
+            </svg>
+            Remix
+          </a>
+        </div>
+
+        <div class="chart-toolbar">
+
+          <div class="ct-menu" id="tfMenu">
+            <button type="button" class="ct-trigger" id="tfTrigger"
+                    aria-haspopup="listbox" aria-expanded="false">
+              <span id="tfLabel">15s</span>
+              <svg class="ct-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+
+            <div class="ct-pop" id="tfPop" role="listbox" aria-label="Interval">
+              <div class="ct-group">Seconds</div>
+              <button type="button" class="ct-item" role="option" data-tf="15">15 seconds</button>
+              <button type="button" class="ct-item" role="option" data-tf="30">30 seconds</button>
+              <div class="ct-group">Minutes</div>
+              <button type="button" class="ct-item" role="option" data-tf="60">1 minute</button>
+              <button type="button" class="ct-item" role="option" data-tf="300">5 minutes</button>
+              <button type="button" class="ct-item" role="option" data-tf="900">15 minutes</button>
+              <button type="button" class="ct-item" role="option" data-tf="1800">30 minutes</button>
+              <div class="ct-group">Hours</div>
+              <button type="button" class="ct-item" role="option" data-tf="3600">1 hour</button>
+              <button type="button" class="ct-item" role="option" data-tf="14400">4 hours</button>
+            </div>
+          </div>
+
+          <span class="ct-sep"></span>
+
+          <div class="ct-menu" id="styleMenu">
+            <button type="button" class="ct-trigger" id="styleTrigger"
+                    aria-haspopup="listbox" aria-expanded="false" data-tip="Chart style">
+              <svg id="styleIcon" class="ct-glyph" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M7 4v16M7 8h3V16H7zM17 4v16M14 7h3v9h-3z"/>
+              </svg>
+              <svg class="ct-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+
+            <div class="ct-pop" id="stylePop" role="listbox" aria-label="Chart style">
+              <button type="button" class="ct-item ct-item-icon" role="option" data-style="candles">
+                <svg class="ct-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M7 4v16M7 8h3V16H7zM17 4v16M14 7h3v9h-3z"/>
+                </svg>
+                Candles
+              </button>
+              <button type="button" class="ct-item ct-item-icon" role="option" data-style="hollow">
+                <svg class="ct-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M7 4v16M7 8h3V16H7zM17 4v16M14 7h3v9h-3z"/>
+                </svg>
+                Hollow candles
+              </button>
+              <button type="button" class="ct-item ct-item-icon" role="option" data-style="bars">
+                <svg class="ct-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M8 4v16M8 9H5M8 14h3M16 4v16M16 8h3M16 15h-3"/>
+                </svg>
+                Bars
+              </button>
+              <button type="button" class="ct-item ct-item-icon" role="option" data-style="line">
+                <svg class="ct-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 17l5-6 4 3 4-6 5 5"/>
+                </svg>
+                Line
+              </button>
+              <button type="button" class="ct-item ct-item-icon" role="option" data-style="area">
+                <svg class="ct-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 17l5-6 4 3 4-6 5 5"/><path d="M3 17v3h18v-3" opacity=".55"/>
+                </svg>
+                Area
+              </button>
+            </div>
+          </div>
+
+          <span class="ct-brand"><%= mixer.ticker %> on mixer.fund</span>
+        </div>
+
+        <div class="resizable-chart bg-[#0B0D10] relative" id="chart-container">
+          <div id="chart-root" class="w-full h-full"></div>
+        </div>
+
+        <div class="chart-adjuster" id="chart-adjuster"></div>
+
+        <div class="bg-[#0B0D10]">
+
+          <div class="flex border-b border-gray-800 bg-[#0b0d10]">
+            <button onclick="switchTab('orders')" class="tab-button active px-6 py-3 text-sm font-medium text-gray-400" data-tab="orders">
+              Transactions
+            </button>
+            <button onclick="switchTab('position')" class="tab-button px-6 py-3 text-sm font-medium text-gray-400" data-tab="position">
+              Your Position
+            </button>
+            <button onclick="switchTab('holders')" class="tab-button px-6 py-3 text-sm font-medium text-gray-400" data-tab="holders">
+              Holders
+            </button>
+            <button onclick="switchTab('allocations')" class="tab-button px-6 py-3 text-sm font-medium text-gray-400" data-tab="allocations">
+              Allocations
+            </button>
+            <button onclick="switchTab('performance')" class="tab-button px-6 py-3 text-sm font-medium text-gray-400" data-tab="performance">
+              Token Performance
+            </button>
+            <%
+
+              var hasLineage = (typeof competing !== 'undefined' && competing && competing.length)
+                            || mixer.parent_mixer_id || mixer.thesis || mixer.thesis_title;
+            %>
+            <% if (hasLineage) { %>
+              <button onclick="switchTab('theses')" class="tab-button px-6 py-3 text-sm font-medium text-gray-400" data-tab="theses">
+                Thesis<% if (typeof competing !== 'undefined' && competing && competing.length) { %>
+                  <span class="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-[#7453E2]/20 text-[#a78bfa]"><%= competing.length %></span>
+                <% } %>
+              </button>
+            <% } %>
+          </div>
+
+          <div>
+
+            <div id="tab-orders" class="tab-content">
+
+              <div class="flex w-full flex-row px-4 h-8 items-center border-b border-[#21262d] sticky top-0 bg-[#0b0d10] z-10">
+                <div class="w-[60px] shrink-0"><span class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Age</span></div>
+                <div class="w-[44px] shrink-0"><span class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Type</span></div>
+                <div class="flex-1 text-right"><span class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Price</span></div>
+                <div class="flex-1 text-right"><span class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Amount</span></div>
+                <div class="flex-1 text-right"><span class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Total USD</span></div>
+                <div class="w-[104px] shrink-0 text-right"><span class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Trader</span></div>
+                <div class="w-[22px] shrink-0"></div>
+              </div>
+
+              <div id="liveTradeLog" class="overflow-y-auto" style="max-height:420px">
+                <div class="px-4 py-8 text-center text-xs text-gray-500">Loading trades…</div>
+              </div>
+            </div>
+
+            <div id="tab-position" class="tab-content hidden">
+              <div id="positionPanel" class="pos-panel" data-state="loading">
+
+                <div class="pos-loading px-4 py-10 text-center text-xs text-gray-500">Loading your position…</div>
+
+                <div class="pos-empty px-6 py-12 flex-col items-center text-center">
+                  <img src="<%= (mixer.image && mixer.image.trim()) ? mixer.image : '/images/tokens/' + (allocations[0] ? allocations[0].token_address : 'none') %>" alt="" class="w-10 h-10 rounded-full object-cover opacity-60 mb-3">
+                  <p class="text-[13px] font-semibold text-white">You don't hold <%= mixer.ticker %> yet</p>
+                  <p id="posEmptySub" class="text-[12px] text-gray-500 mt-1 max-w-[340px] leading-relaxed">
+                    Once you buy, your stake, profit and loss, and what it's made of show up here.
+                  </p>
+                  <button type="button" onclick="focusBuy()"
+                    class="mt-4 h-[32px] px-4 rounded-[5px] text-[12px] font-semibold bg-[#16a34a] hover:bg-[#15803d] text-white transition-colors">
+                    Buy <%= mixer.ticker %>
+                  </button>
+                </div>
+
+                <div class="pos-held">
+
+                  <div class="grid grid-cols-2 lg:grid-cols-4 border-b border-[#21262d]">
+                    <div class="pos-kpi">
+                      <span class="pos-label">Holding</span>
+                      <span class="pos-value"><span id="posUnits">—</span> <span class="pos-unit"><%= mixer.ticker %></span></span>
+                      <span class="pos-sub"><span id="posSol">—</span> SOL<span id="posUsd"></span></span>
+                    </div>
+                    <div class="pos-kpi">
+                      <span class="pos-label">Unrealised P/L</span>
+                      <span id="posPnl" class="pos-value">—</span>
+                      <span class="pos-sub"><span id="posPnlPct" class="font-semibold">—</span><span id="posPnlBasis"></span></span>
+                    </div>
+                    <div class="pos-kpi">
+                      <span class="pos-label">Realised P/L</span>
+                      <span id="posRealised" class="pos-value">—</span>
+                      <span id="posRealisedSub" class="pos-sub">Nothing sold yet</span>
+                    </div>
+                    <div class="pos-kpi">
+                      <span class="pos-label">Share of fund</span>
+                      <span id="posOwn" class="pos-value">—</span>
+                      <span class="pos-bar"><span id="posOwnBar" style="width:0%"></span></span>
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-1 lg:grid-cols-[1.7fr_1fr]">
+
+                    <div class="lg:border-r border-[#21262d] min-w-0">
+                      <div class="pos-section-head">
+                        <span>Composition</span>
+                        <span class="text-gray-600 normal-case tracking-normal font-normal">Valued at live prices</span>
+                      </div>
+                      <table class="w-full pos-table">
+                        <thead>
+                          <tr>
+                            <th class="text-left">Token</th>
+                            <th class="text-left w-[38%]">Share of position</th>
+                            <th class="text-right">Amount</th>
+                            <th class="text-right">Value</th>
+                          </tr>
+                        </thead>
+                        <tbody id="posLegs"></tbody>
+                      </table>
+                    </div>
+
+                    <div class="min-w-0">
+                      <div class="pos-section-head"><span>Details</span></div>
+                      <dl class="pos-dl">
+                        <div><dt>Avg. buy price</dt><dd id="posAvgBuy">—</dd></div>
+                        <div><dt>Cost of holding</dt><dd id="posCost">—</dd></div>
+                        <div><dt>Total bought</dt><dd id="posBought">—</dd></div>
+                        <div><dt>Total sold</dt><dd id="posSold">—</dd></div>
+                        <div><dt>Held for</dt><dd id="posHeld">—</dd></div>
+                        <div><dt>Trades</dt><dd id="posTrades">—</dd></div>
+                      </dl>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="pos-orders border-t border-[#21262d]">
+                  <div class="pos-section-head"><span>Limit orders</span></div>
+                  <div id="limitOrdersList" class="px-4 pb-4"></div>
+                </div>
+              </div>
+            </div>
+
+            <div id="tab-holders" class="tab-content hidden p-4">
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="text-sm font-semibold">Holders</h3>
+                <span class="text-xs text-gray-500"><span id="holdersCount">0</span> on chain</span>
+              </div>
+
+              <div id="holdersList" class="space-y-2 overflow-y-auto" style="max-height:420px">
+                <p class="text-xs text-gray-500">Loading holders…</p>
+              </div>
+            </div>
+
+            <div id="tab-allocations" class="tab-content hidden p-4">
+              <div class="grid grid-cols-3 gap-4">
+                <div class="col-span-2">
+                  <h3 class="footer-title font-semibold mb-3">Token Allocations</h3>
+                  <div class="space-y-2">
+                    <% allocations.forEach((a, index) => { %>
+                    <div class="bg-[#16171D] rounded-lg p-3.5 hover:bg-[#1d1e25] transition token-allocation-row">
+                      <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-2">
+                          <img src="/images/tokens/<%= a.token_address %>" alt="<%= a.token?.symbol || '' %>" class="w-8 h-8 rounded-full bg-[#0b0d10]" loading="lazy">
+                          <div style="padding-left: 6px;">
+                            <p class="token-name font-semibold text-white">
+								<%= a.token?.name || 'Token ' + (index + 1) %>
+								<% if (a.token?.is_verified) { %>
+								<span class="token-verified">
+									<svg width="14.5" height="14.5" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" class="shrink-0 text-green" aria-label="Verified"><g clip-path="url(#clip0_64_412)"><path d="M5.24996 7.00001L6.41663 8.16668L9.04163 5.54168M10.4423 2.9158C10.5624 3.20632 10.793 3.43724 11.0833 3.5578L12.1013 3.9795C12.3919 4.09984 12.6227 4.33067 12.743 4.62121C12.8634 4.91175 12.8634 5.23819 12.743 5.52873L12.3217 6.54606C12.2013 6.83673 12.2011 7.1635 12.322 7.45403L12.7427 8.47106C12.8023 8.61496 12.8331 8.7692 12.8331 8.92498C12.8331 9.08075 12.8024 9.23501 12.7428 9.37893C12.6832 9.52285 12.5958 9.65361 12.4857 9.76374C12.3755 9.87388 12.2447 9.96122 12.1008 10.0208L11.0835 10.4422C10.793 10.5623 10.5621 10.7929 10.4415 11.0832L10.0198 12.1013C9.8995 12.3918 9.66868 12.6226 9.37816 12.743C9.08763 12.8633 8.76119 12.8633 8.47067 12.743L7.45337 12.3216C7.16284 12.2015 6.83652 12.2018 6.54617 12.3223L5.52815 12.7434C5.23778 12.8634 4.91163 12.8633 4.62134 12.7431C4.33105 12.6228 4.10036 12.3923 3.97993 12.1021L3.55813 11.0837C3.43801 10.7932 3.20744 10.5623 2.91712 10.4417L1.8991 10.02C1.6087 9.8997 1.37794 9.66902 1.25756 9.37865C1.13717 9.08828 1.13701 8.76198 1.2571 8.47149L1.67848 7.45416C1.79852 7.16362 1.79828 6.83729 1.6778 6.54692L1.25703 5.52813C1.19737 5.38423 1.16665 5.22999 1.16663 5.07421C1.1666 4.91843 1.19727 4.76418 1.25688 4.62026C1.31649 4.47634 1.40388 4.34558 1.51404 4.23545C1.6242 4.12532 1.75499 4.03797 1.89892 3.9784L2.91622 3.55701C3.20647 3.43699 3.43724 3.20671 3.55789 2.91671L3.97957 1.89865C4.09991 1.60811 4.33073 1.37728 4.62126 1.25693C4.91178 1.13659 5.23822 1.13659 5.52874 1.25693L6.54604 1.67833C6.83657 1.79837 7.16289 1.79813 7.45324 1.67764L8.47169 1.25759C8.76218 1.13731 9.08854 1.13734 9.37901 1.25766C9.66948 1.37798 9.90028 1.60874 10.0206 1.8992L10.4424 2.91757L10.4423 2.9158Z" stroke="currentColor" stroke-width="1.3125" stroke-linecap="round" stroke-linejoin="round"></path></g><defs><clipPath id="clip0_64_412"><rect width="14" height="14" fill="currentColor"></rect></clipPath></defs></svg>
+								</span>
+								<% } %>
+							</p>
+                            <p class="token-address text-gray-400">
+                              <span><%= a.token_address.substring(0, 6) %>...<%= a.token_address.substring(a.token_address.length - 4) %></span>
+                              <button type="button" class="token-addr-action" title="Copy address"
+                                aria-label="Copy token address"
+                                onclick="copyTokenAddress(event, '<%= a.token_address %>')">
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                  <rect x="9" y="9" width="13" height="13" rx="2"/>
+                                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                                </svg>
+                              </button>
+                              <a class="token-addr-action" title="View on Solana Explorer"
+                                aria-label="Open token in explorer"
+                                href="https://explorer.solana.com/address/<%= a.token_address %>?cluster=devnet"
+                                target="_blank" rel="noopener noreferrer">
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                                  <polyline points="15 3 21 3 21 9"/>
+                                  <line x1="10" y1="14" x2="21" y2="3"/>
+                                </svg>
+                              </a>
+                            </p>
+                          </div>
+                        </div>
+                        <div class="text-right">
+							<p class="token-price text-white">
+                              <% var tp = (typeof tokenPrices !== 'undefined' && tokenPrices) ? tokenPrices[a.token_address] : undefined; %>
+                              <% if (tp !== undefined && tp !== null) { %>
+                                $<span id="token-price-<%= a.token_address %>"><%= fmtPrice(tp) %></span>
+                              <% } else { %>
+                                <span id="token-price-<%= a.token_address %>" class="text-gray-500 text-[11px] font-normal"
+                                  title="No market price available for this token">no price</span>
+                              <% } %>
+                            </p>
+							<p class="token-percentage text-gray-400"><%= a.weight ? (a.weight * 100).toFixed(1) + '%' : 'N/A' %></p>
+                        </div>
+                      </div>
+                    </div>
+                    <% }) %>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 class="footer-title mb-3">Distribution</h3>
+                  <div class="bg-[#0b0d10] rounded-lg p-4 pie-chart-container">
+                    <canvas id="allocation-pie-chart"></canvas>
+                  </div>
+                  <div class="mt-3 space-y-1.5">
+                    <% allocations.forEach((a, index) => { %>
+                    <div class="flex items-center justify-between text-xs">
+                      <div class="flex items-center space-x-1.5">
+                        <div class="w-2.5 h-2.5 rounded-full" style="background-color: <%= ['#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#3b82f6', '#ef4444'][index % 6] %>"></div>
+                        <span class="text-gray-400"><%= a.token?.symbol || 'Token ' + (index + 1) %></span>
+                      </div>
+                      <span class="text-white font-semibold"><%= a.weight ? (a.weight * 100).toFixed(1) + '%' : 'N/A' %></span>
+                    </div>
+                    <% }) %>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div id="tab-performance" class="tab-content hidden p-4">
+              <div id="performance-chart-container" class="bg-[#0B0D10] border border-gray-800 rounded-lg w-full" style="height: 500px;"></div>
+
+              <div class="mt-4 flex items-center justify-between">
+                <div>
+                  <h3 class="text-sm font-semibold text-white mb-1">Token Performance</h3>
+                  <p class="text-xs text-gray-400">Individual token performance (% change since start)</p>
+                </div>
+                <div class="flex items-center space-x-4">
+                  <p class="text-xs text-gray-400">Last updated: <span id="last-updated">Just now</span></p>
+                  <button
+                    onclick="togglePerformanceFullscreen()"
+                    class="px-3 py-1.5 bg-[#0b0d10] hover:bg-[#1a1a1a] text-white rounded-md text-xs flex items-center space-x-2 transition">
+                    <i class="ri-fullscreen-line text-xs"></i>
+                    <span>Fullscreen</span>
+                  </button>
+                </div>
+              </div>
+
+              <div id="performance-legend" class="flex flex-wrap gap-3 mt-3"></div>
+            </div>
+
+            <% if (hasLineage) { %>
+            <div id="tab-theses" class="tab-content hidden p-4">
+              <%
+                function fmtSolC(v) {
+                  var n = Number(v) || 0;
+                  if (n === 0) return '0';
+                  if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
+                  if (n >= 1) return n.toFixed(2);
+                  return n.toFixed(4);
+                }
+                function agoDate(ts) {
+                  if (!ts) return '—';
+                  return new Date(ts).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+                }
+                var comp = (typeof competing !== 'undefined' && competing) ? competing : [];
+                var par = (typeof parentMixer !== 'undefined' && parentMixer) ? parentMixer : null;
+              %>
+
+              <div class="rounded-xl border border-[#21262d] bg-[#101317] p-5 mb-4">
+                <div class="flex items-start justify-between gap-4 mb-2">
+                  <div class="min-w-0">
+                    <span class="text-[10px] uppercase tracking-wider text-[#a78bfa] font-bold">
+                      <%= mixer.parent_mixer_id ? 'This remix argues' : 'The thesis' %>
+                    </span>
+                    <h3 class="text-lg font-bold text-white mt-1">
+                      <%= mixer.thesis_title || mixer.name %>
+                    </h3>
+                  </div>
+                  <a href="/mixer/<%= mixer.mixer_id %>/remix"
+                     class="shrink-0 text-[11px] font-semibold px-3 py-1.5 rounded-lg bg-[#7453E2]/15 border border-[#7453E2]/40 text-[#a78bfa] hover:bg-[#7453E2] hover:text-white transition-colors">
+                    Disagree? Remix it
+                  </a>
+                </div>
+
+                <% if (mixer.thesis) { %>
+                  <p class="text-sm text-gray-300 leading-relaxed whitespace-pre-line"><%= mixer.thesis %></p>
+                <% } else { %>
+                  <p class="text-sm text-gray-600 italic">No thesis was written for this mixer.</p>
+                <% } %>
+                <%
+                  var tabSiteHost = null;
+                  try {
+                    if (mixer.website && /^https?:\/\//i.test(mixer.website)) {
+                      tabSiteHost = new URL(mixer.website).hostname.replace(/^www\./, '');
+                    }
+                  } catch (e) { tabSiteHost = null; }
+                %>
+                <% if (tabSiteHost) { %>
+                  <a href="<%= mixer.website %>" target="_blank" rel="noopener noreferrer nofollow ugc"
+                     class="thesis-site mt-3" title="<%= mixer.website %>">
+                    <svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                    </svg>
+                    <span class="truncate">Read more on <%= tabSiteHost %></span>
+                    <span aria-hidden="true">&#8599;</span>
+                  </a>
+                <% } %>
+
+                <% if (mixer.counter_thesis) { %>
+                  <div class="mt-4 pt-4 border-t border-[#21262d]">
+                    <span class="text-[10px] uppercase tracking-wider text-gray-500 font-bold">
+                      Why <%= creatorHandle ? '@' + creatorHandle : 'the creator' %> disagreed with
+                      <%= mixer.parent_name || 'the original' %>
+                    </span>
+                    <p class="text-sm text-gray-300 leading-relaxed whitespace-pre-line mt-1.5"><%= mixer.counter_thesis %></p>
+                  </div>
+                <% } %>
+
+                <% if (mixer.parent_mixer_id || mixer.parent_name) { %>
+                  <p class="text-[11px] text-gray-500 mt-4 pt-3 border-t border-[#21262d] leading-relaxed">
+                    Remixed from
+                    <% if (mixer.parent_mixer_id) { %>
+                      <a href="/mixer/<%= mixer.parent_mixer_id %>" class="text-[#a78bfa] hover:underline"><%= mixer.parent_name || 'the original' %></a><% } else { %><%= mixer.parent_name %><% } %>.
+                    This is an independent mixer with its own vault and investors, and the
+                    original creator has not endorsed it.
+                  </p>
+                <% } %>
+
+                <div class="mt-4 pt-3 border-t border-[#21262d] flex items-center gap-4 text-[11px] text-gray-500">
+                  <span>Since <%= agoDate(mixer.created_at) %></span>
+                  <% if (par) { %>
+                    <a href="/mixer/<%= mixer.mixer_id %>/compare/<%= par.mixer_id %>"
+                       class="text-[#a78bfa] hover:underline font-medium">Compare with the original →</a>
+                  <% } %>
+                </div>
+              </div>
+
+              <% if (comp.length) { %>
+                <h4 class="text-sm font-semibold text-white mb-1">Competing theses</h4>
+                <p class="text-[11px] text-gray-500 mb-3">
+                  Independent mixers built by disagreeing with this one. Each has its own vault and investors.
+                </p>
+
+                <div class="space-y-2">
+                  <% comp.forEach(function (c) { %>
+                    <div class="fund-card-t" data-href="/mixer/<%= c.mixer_id %>">
+                      <div class="flex items-start gap-3">
+                        <img src="<%= c.image && c.image.trim() ? c.image : '/images/tokens/' + (c.topTokens[0] ? c.topTokens[0].address : 'none') %>"
+                             alt="" class="w-9 h-9 rounded-lg object-cover border border-[#21262d] bg-[#0b0d10] shrink-0">
+                        <div class="min-w-0 flex-1">
+                          <div class="flex items-center gap-2 flex-wrap">
+                            <span class="text-sm font-semibold text-white truncate"><%= c.name %></span>
+                            <span class="text-[10px] px-1.5 py-0.5 rounded bg-white/5 border border-[#21262d] text-gray-400"><%= c.ticker %></span>
+                            <span class="text-[10px] px-1.5 py-0.5 rounded bg-[#7453E2]/15 border border-[#7453E2]/30 text-[#a78bfa]">Remix</span>
+                            <% if (c.creatorHandle) { %>
+                              <span class="text-[11px] text-gray-500">by <a
+                                 href="https://x.com/<%= c.creatorHandle %>" target="_blank" rel="noopener"
+                                 data-xcard="<%= c.creatorHandle %>"
+                                 onclick="event.stopPropagation()"
+                                 class="hover:text-[#2fbaff] transition-colors">@<%= c.creatorHandle %></a></span>
+                            <% } %>
+                          </div>
+
+                          <% if (c.thesis_title) { %>
+                            <p class="text-[12px] text-gray-300 mt-1 italic">&ldquo;<%= c.thesis_title %>&rdquo;</p>
+                          <% } %>
+
+                          <div class="flex items-center gap-1.5 mt-2 flex-wrap">
+                            <% c.topTokens.slice(0, 5).forEach(function (t) { %>
+                              <span class="text-[10px] px-1.5 py-0.5 rounded bg-black/40 border border-[#21262d] text-gray-400">
+                                <%= t.symbol %> <span class="text-gray-600"><%= (t.weight * 100).toFixed(0) %>%</span>
+                              </span>
+                            <% }) %>
+                            <% if (c.tokenCount > 5) { %>
+                              <span class="text-[10px] text-gray-600">+<%= c.tokenCount - 5 %></span>
+                            <% } %>
+                          </div>
+                        </div>
+
+                        <div class="text-right shrink-0">
+                          <div class="text-sm font-semibold text-white tabular-nums">
+                            <%= fmtSolC(c.netSol) %> <span class="text-[10px] text-gray-500 font-normal">SOL</span>
+                          </div>
+                          <div class="text-[10px] text-gray-500">
+                            <%= c.investors %> investor<%= c.investors === 1 ? '' : 's' %>
+                          </div>
+                          <% if (c.change24h !== null && c.change24h !== undefined) { %>
+                            <div class="text-[11px] font-semibold tabular-nums mt-1"
+                                 style="color:<%= c.change24h >= 0 ? '#22c55e' : '#f6465d' %>">
+                              <%= (c.change24h >= 0 ? '+' : '') + Number(c.change24h).toFixed(2) %>%
+                            </div>
+                          <% } else { %>
+                            <div class="text-[11px] text-gray-600 mt-1">—</div>
+                          <% } %>
+                        </div>
+                      </div>
+
+                      <div class="flex items-center justify-between mt-2.5 pt-2.5 border-t border-[#21262d]">
+                        <span class="text-[10px] text-gray-500">Since <%= agoDate(c.created_at) %></span>
+                        <a href="/mixer/<%= c.mixer_id %>/compare/<%= mixer.mixer_id %>"
+                           onclick="event.stopPropagation()"
+                           class="text-[10px] text-[#a78bfa] hover:underline font-medium">Compare →</a>
+                      </div>
+                    </div>
+                  <% }) %>
+                </div>
+
+                <p class="text-[10px] text-gray-600 mt-3 leading-relaxed">
+                  Invested is net SOL in (deposits minus redemptions), not the current value of the vaults.
+                  Mixers launched on different dates have run for different lengths of time, so 24h change is
+                  shown rather than a since-inception return.
+                </p>
+              <% } else if (mixer.parent_mixer_id) { %>
+                <p class="text-sm text-gray-500">
+                  No one has remixed this yet.
+                </p>
+              <% } else { %>
+                <div class="rounded-xl border border-dashed border-[#21262d] p-6 text-center">
+                  <p class="text-sm text-gray-400">No competing theses yet.</p>
+                  <p class="text-[12px] text-gray-600 mt-1 max-w-sm mx-auto leading-relaxed">
+                    If you think this allocation is wrong, remix it: keep what you agree with,
+                    change what you don't, and publish your own version.
+                  </p>
+                  <a href="/mixer/<%= mixer.mixer_id %>/remix"
+                     class="inline-block mt-3 text-[12px] font-semibold px-4 py-2 rounded-lg bg-[#7453E2] hover:bg-[#6344d1] text-white transition-colors">
+                    Remix this mixer
+                  </a>
+                </div>
+              <% } %>
+            </div>
+            <% } %>
+
+          </div>
+        </div>
+
+      </div>
+
+      <div class="w-80 shrink-0 bg-[#0b0d10] border-l border-gray-800 overflow-y-auto hide-scrollbar">
+        <div class="timeframe-container">
+
+<div class="flex-1 flex flex-col items-center justify-center relative cursor-pointer" style="border-right: 1px solid #1f2937;">
+	<span class="text-xs text-gray-300">5m</span>
+	<% var tfv = null; try { tfv = timeframes.timeframes['5m'].change_percent; } catch (e) {} %>
+	<span id="change-5m" class="timeframe-text <%= tfv == null ? 'price-neutral' : (tfv > 0 ? 'price-positive' : (tfv < 0 ? 'price-negative' : 'price-neutral')) %>">
+		<%= tfv == null ? '—' : ((tfv >= 0 ? '+' : '') + Number(tfv).toFixed(2) + '%') %>
+	</span>
+</div>
+
+<div class="flex-1 flex flex-col items-center justify-center cursor-pointer"  style="border-right: 1px solid #1f2937;">
+	<span class="text-xs text-gray-300">1h</span>
+	<% var tfv = null; try { tfv = timeframes.timeframes['1h'].change_percent; } catch (e) {} %>
+	<span id="change-1h" class="timeframe-text <%= tfv == null ? 'price-neutral' : (tfv > 0 ? 'price-positive' : (tfv < 0 ? 'price-negative' : 'price-neutral')) %>">
+		<%= tfv == null ? '—' : ((tfv >= 0 ? '+' : '') + Number(tfv).toFixed(2) + '%') %>
+	</span>
+</div>
+
+<div class="flex-1 flex flex-col items-center justify-center cursor-pointer"  style="border-right: 1px solid #1f2937;">
+	<span class="text-xs text-gray-300">6h</span>
+	<% var tfv = null; try { tfv = timeframes.timeframes['6h'].change_percent; } catch (e) {} %>
+	<span id="change-6h" class="timeframe-text <%= tfv == null ? 'price-neutral' : (tfv > 0 ? 'price-positive' : (tfv < 0 ? 'price-negative' : 'price-neutral')) %>">
+		<%= tfv == null ? '—' : ((tfv >= 0 ? '+' : '') + Number(tfv).toFixed(2) + '%') %>
+	</span>
+</div>
+
+<div class="flex-1 flex flex-col items-center justify-center cursor-pointer">
+	<span class="text-xs text-gray-300">24h</span>
+	<% var tfv = null; try { tfv = timeframes.timeframes['24h'].change_percent; } catch (e) {} %>
+	<span id="change-24h" class="timeframe-text <%= tfv == null ? 'price-neutral' : (tfv > 0 ? 'price-positive' : (tfv < 0 ? 'price-negative' : 'price-neutral')) %>">
+		<%= tfv == null ? '—' : ((tfv >= 0 ? '+' : '') + Number(tfv).toFixed(2) + '%') %>
+	</span>
+</div>
+
+		</div>
+
+		<div class="p-4" style="padding-bottom: 0;">
+
+<div class="w-full text-[12px] px-3 pb-4">
+
+  <%
+
+    var rdRugged = (typeof riskDetail !== 'undefined' && riskDetail && riskDetail.rugged) || [];
+    var rdHigh = (typeof riskDetail !== 'undefined' && riskDetail && riskDetail.highRisk) || [];
+    var rdRuggedPct = (typeof riskDetail !== 'undefined' && riskDetail && riskDetail.ruggedWeight) || 0;
+    var rdThin = (typeof riskDetail !== 'undefined' && riskDetail && riskDetail.thin) || [];
+    var rdThinPct = (typeof riskDetail !== 'undefined' && riskDetail && riskDetail.thinWeight) || 0;
+    var rdUnver = (typeof riskDetail !== 'undefined' && riskDetail && riskDetail.unverified) || [];
+
+    var rdThinUnver = rdThin.filter(function (sym) { return rdUnver.indexOf(sym) !== -1; });
+  %>
+  <% if (rdRugged.length) { %>
+    <div id="ruggedBanner" class="mb-3 rounded-[6px] border border-[#f6465d]/45 bg-[#f6465d]/10 px-3 py-2.5">
+      <div class="flex items-start gap-2">
+        <svg class="w-3.5 h-3.5 mt-[1px] shrink-0 text-[#f6465d]" fill="none" stroke="currentColor"
+             stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 9v4m0 4h.01" stroke-linecap="round"/>
+          <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>
+        </svg>
+        <div class="min-w-0">
+          <p class="text-[12px] font-semibold text-[#f6465d]">
+            <%= rdRugged.length === 1 ? 'A token in this mixer is flagged as rugged'
+                                      : rdRugged.length + ' tokens in this mixer are flagged as rugged' %>
+          </p>
+          <p class="text-[11px] text-textSecondary leading-snug mt-0.5">
+            <%= rdRugged.join(', ') %><%= rdRuggedPct > 0 ? ' — ' + rdRuggedPct + '% of the basket' : '' %>.
+            RugCheck reports this as a rug. Anything you buy here is exposed to it.
+          </p>
+        </div>
+      </div>
+    </div>
+  <% } else if (rdHigh.length) { %>
+    <div id="highRiskBanner" class="mb-3 rounded-[6px] border border-[#a16207]/40 bg-[#a16207]/10 px-3 py-2.5">
+      <div class="flex items-start gap-2">
+        <svg class="w-3.5 h-3.5 mt-[1px] shrink-0 text-[#eab308]" fill="none" stroke="currentColor"
+             stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 9v4m0 4h.01" stroke-linecap="round"/>
+          <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>
+        </svg>
+        <div class="min-w-0">
+          <p class="text-[12px] font-semibold text-[#eab308]">High-risk holdings</p>
+          <p class="text-[11px] text-textSecondary leading-snug mt-0.5">
+            <%= rdHigh.join(', ') %> rate 70 or above on RugCheck, in pools too
+            thin to exit cleanly, or held by an unverified issuer with a live
+            mint or freeze authority.
+          </p>
+        </div>
+      </div>
+    </div>
+  <% } else if (rdThinUnver.length && rdThinPct >= 50) { %>
+    <div id="thinBanner" class="mb-3 rounded-[6px] border border-[#a16207]/40 bg-[#a16207]/10 px-3 py-2.5">
+      <div class="flex items-start gap-2">
+        <svg class="w-3.5 h-3.5 mt-[1px] shrink-0 text-[#eab308]" fill="none" stroke="currentColor"
+             stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 9v4m0 4h.01" stroke-linecap="round"/>
+          <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>
+        </svg>
+        <div class="min-w-0">
+          <p class="text-[12px] font-semibold text-[#eab308]">Thinly traded basket</p>
+          <p class="text-[11px] text-textSecondary leading-snug mt-0.5">
+            <%= rdThinPct %>% of this basket sits in pools under $1M, and
+            <%= rdThinUnver.join(', ') %> <%= rdThinUnver.length === 1 ? 'is' : 'are' %>
+            unverified. Selling a position may move the price against you.
+          </p>
+        </div>
+      </div>
+    </div>
+  <% } %>
+
+  <% if (readiness.state !== 'ready') { %>
+    <div id="readinessBanner"
+         class="mb-3 rounded-[6px] border px-3 py-2.5 <%= readiness.tradeable
+           ? 'border-[#a16207]/40 bg-[#a16207]/10'
+           : 'border-[#7453E2]/35 bg-[#7453E2]/10' %>">
+      <div class="flex items-start gap-2">
+        <% if (readiness.tradeable) { %>
+          <svg class="w-3.5 h-3.5 mt-[1px] shrink-0 text-[#eab308]" fill="none" stroke="currentColor"
+               stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 9v4m0 4h.01" stroke-linecap="round"/>
+            <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>
+          </svg>
+        <% } else { %>
+          <span class="relative flex h-2 w-2 mt-[5px] shrink-0">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#7453E2] opacity-70"></span>
+            <span class="relative inline-flex rounded-full h-2 w-2 bg-[#7453E2]"></span>
+          </span>
+        <% } %>
+        <div class="min-w-0">
+          <p class="text-[11.5px] font-semibold <%= readiness.tradeable ? 'text-[#eab308]' : 'text-[#a78bfa]' %>">
+            <%= readiness.state === 'pricing' ? 'Pricing in progress'
+              : readiness.state === 'unpriceable' ? 'Not tradeable'
+              : 'Partial pricing' %>
+          </p>
+          <p class="text-[11px] text-textSecondary leading-snug mt-0.5"><%= readiness.reason %></p>
+        </div>
+      </div>
+    </div>
+  <% } %>
+
+  <div class="flex gap-1 mb-3 p-[3px] rounded-[6px] bg-[#101317] border border-primaryStroke">
+    <button id="buyTab"
+      class="flex-1 py-[7px] rounded-[4px] text-[12.5px] font-semibold transition-colors bg-[#16a34a] text-white">Buy</button>
+    <button id="sellTab"
+      class="flex-1 py-[7px] rounded-[4px] text-[12.5px] font-semibold transition-colors text-textSecondary hover:text-white">Sell</button>
+  </div>
+
+  <div class="relative flex mb-3 border-b border-primaryStroke">
+    <button id="marketTab" class="flex-1 py-2 relative z-10 transition-colors duration-200 text-white text-[12px] font-medium">Market</button>
+    <button id="limitTab" class="flex-1 py-2 relative z-10 transition-colors duration-200 text-textSecondary text-[12px] font-medium">Limit</button>
+    <div id="tabIndicator" class="absolute bottom-0 h-[2px] bg-white transition-all duration-300 ease-in-out" style="width: 50%; left: 0%;"></div>
+  </div>
+
+  <div id="marketContent" class="flex flex-col gap-[10px]">
+
+    <div class="flex flex-col">
+      <div class="flex h-[40px] items-center rounded-t-[5px] border border-primaryStroke bg-[#15181e] pr-[12px] focus-within:border-[#7453E2] transition-colors">
+        <div class="pl-[12px] pr-[4px]">
+          <span class="text-[10px] font-semibold tracking-wider text-textTertiary">AMOUNT</span>
+        </div>
+        <div class="flex-1">
+          <input id="marketAmount" type="text" inputmode="decimal" placeholder="0.00"
+            class="w-full bg-transparent px-[8px] text-[15px] font-semibold text-textPrimary tabular-nums focus:outline-none placeholder-[#3d434b]">
+        </div>
+
+        <div class="flex items-center gap-1.5 shrink-0">
+          <span id="marketUnitIcon" class="flex items-center justify-center w-[14px] h-[14px]">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M4 17.5 7 14h13l-3 3.5H4zM4 6.5 7 10h13L17 6.5H4zM4 12l3-3.5h13L17 12H4z" fill="#7453E2"/>
+            </svg>
+          </span>
+          <span id="marketUnit" class="text-[11px] font-semibold text-textSecondary">SOL</span>
+        </div>
+      </div>
+
+      <div id="marketQuick" class="flex h-[26px] rounded-b-[5px] border-x border-b border-primaryStroke text-[11px] text-textSecondary">
+        <button onclick="setAmount('market',0.1)" class="flex-1 border-r border-primaryStroke hover:bg-primaryStroke hover:text-white transition-colors">0.1</button>
+        <button onclick="setAmount('market',0.5)" class="flex-1 border-r border-primaryStroke hover:bg-primaryStroke hover:text-white transition-colors">0.5</button>
+        <button onclick="setAmount('market',1)" class="flex-1 border-r border-primaryStroke hover:bg-primaryStroke hover:text-white transition-colors">1</button>
+        <button id="maxBtn" onclick="setMaxAmount()" class="flex-1 hover:bg-primaryStroke hover:text-white transition-colors font-medium">MAX</button>
+      </div>
+      <p id="minTradeHint" class="mt-1.5 text-[10.5px] text-textTertiary tabular-nums min-h-[14px]"></p>
+    </div>
+
+    <button id="marketButton"
+      class="h-[42px] w-full rounded-[5px] text-[13px] font-semibold bg-[#16a34a] hover:bg-[#15803d] disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+      Buy Market
+    </button>
+  </div>
+
+  <div id="limitContent" class="flex flex-col gap-[10px] hidden">
+
+    <div class="flex flex-col">
+      <div class="flex h-[40px] items-center rounded-t-[5px] border border-primaryStroke bg-[#15181e] pr-[12px] focus-within:border-[#7453E2] transition-colors">
+        <div class="pl-[12px] pr-[4px]">
+          <span class="text-[10px] font-semibold tracking-wider text-textTertiary">AMOUNT</span>
+        </div>
+        <div class="flex-1">
+          <input id="limitAmount" type="text" inputmode="decimal" placeholder="0.00"
+            class="w-full bg-transparent px-[8px] text-[15px] font-semibold text-textPrimary tabular-nums focus:outline-none placeholder-[#3d434b]">
+        </div>
+        <span id="limitUnit" class="text-[11px] font-semibold text-textSecondary shrink-0">SOL</span>
+      </div>
+
+      <div id="limitQuick" class="flex h-[26px] rounded-b-[5px] border-x border-b border-primaryStroke text-[11px] text-textSecondary">
+        <button onclick="setAmount('limit',0.1)" class="flex-1 border-r border-primaryStroke hover:bg-primaryStroke hover:text-white transition-colors">0.1</button>
+        <button onclick="setAmount('limit',0.5)" class="flex-1 border-r border-primaryStroke hover:bg-primaryStroke hover:text-white transition-colors">0.5</button>
+        <button onclick="setAmount('limit',1)" class="flex-1 border-r border-primaryStroke hover:bg-primaryStroke hover:text-white transition-colors">1</button>
+        <button onclick="setAmount('limit',5)" class="flex-1 hover:bg-primaryStroke hover:text-white transition-colors">5</button>
+      </div>
+    </div>
+
+    <div class="flex flex-col">
+      <div class="flex h-[40px] items-center rounded-t-[5px] border border-primaryStroke bg-[#15181e] pr-[12px] focus-within:border-[#7453E2] transition-colors">
+        <div class="pl-[12px] pr-[4px]">
+          <span class="text-[10px] font-semibold tracking-wider text-textTertiary">TRIGGER</span>
+        </div>
+        <div class="flex-1">
+          <input id="limitPrice" type="text" inputmode="decimal" placeholder="0.00"
+            class="w-full bg-transparent px-[8px] text-[15px] font-semibold text-textPrimary tabular-nums focus:outline-none placeholder-[#3d434b]">
+        </div>
+        <span class="text-[11px] font-semibold text-textSecondary shrink-0">USD</span>
+      </div>
+
+      <div class="flex h-[26px] rounded-b-[5px] border-x border-b border-primaryStroke text-[11px] text-textSecondary">
+        <button onclick="offsetLimit(-10)" class="flex-1 border-r border-primaryStroke hover:bg-primaryStroke hover:text-white transition-colors">-10%</button>
+        <button onclick="offsetLimit(-5)" class="flex-1 border-r border-primaryStroke hover:bg-primaryStroke hover:text-white transition-colors">-5%</button>
+        <button onclick="offsetLimit(5)" class="flex-1 border-r border-primaryStroke hover:bg-primaryStroke hover:text-white transition-colors">+5%</button>
+        <button onclick="offsetLimit(10)" class="flex-1 hover:bg-primaryStroke hover:text-white transition-colors">+10%</button>
+      </div>
+      <p id="limitHint" class="text-[10px] text-textTertiary mt-1.5 leading-snug"></p>
+    </div>
+
+    <button id="limitButton"
+      class="h-[42px] w-full rounded-[5px] text-[13px] font-semibold bg-[#7453E2] hover:bg-[#6344d1] disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+      Place Limit Order
+    </button>
+  </div>
+
+</div>
+</div>
+
+  <div id="pnlStrip" class="flex flex-1 flex-row items-center justify-center border-t border-primaryStroke">
+    <div class="flex max-h-[64px] min-h-[64px] flex-1 flex-row items-center justify-center py-[8px]">
+
+      <div class="flex flex-1 flex-col items-center justify-center gap-[4px]">
+        <span class="text-[12px] font-normal leading-[16px] text-textTertiary">Bought</span>
+        <div class="flex flex-row items-center gap-[4px]">
+          <div class="flex items-center justify-center gap-[4px]">
+            <span id="pnlBought" class="text-[12px] font-medium leading-[16px] text-textSecondary tabular-nums">&mdash;</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="h-[48px] w-[1px] bg-primaryStroke"></div>
+
+      <div class="flex flex-1 flex-col items-center justify-center gap-[4px]">
+        <span class="text-[12px] font-normal leading-[16px] text-textTertiary">Sold</span>
+        <div class="flex flex-row items-center gap-[4px]">
+          <div class="flex items-center justify-center gap-[4px]">
+            <span id="pnlSold" class="text-[12px] font-medium leading-[16px] text-textSecondary tabular-nums">&mdash;</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="h-[48px] w-[1px] bg-primaryStroke"></div>
+
+      <div class="flex flex-1 flex-col items-center justify-center gap-[4px]">
+        <span class="text-[12px] font-normal leading-[16px] text-textTertiary">Holding</span>
+        <div class="flex flex-row items-center gap-[4px]">
+          <div class="flex items-center justify-center gap-[4px]">
+            <span id="pnlHolding" class="text-[12px] font-medium leading-[16px] text-textSecondary tabular-nums">&mdash;</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="h-[48px] w-[1px] bg-primaryStroke"></div>
+
+      <div class="flex min-w-[116px] flex-col items-center justify-center gap-[4px] px-[4px]">
+        <div class="flex h-[16px] flex-row items-center justify-center">
+          <button type="button" id="pnlUnitToggle" onclick="togglePnlUnit()"
+                  title="Switch between SOL and USD"
+                  class="group flex flex-row items-center justify-center gap-[4px] rounded-[4px] px-[6px] pl-[8px]
+                         transition-colors duration-150 ease-in-out hover:cursor-pointer hover:bg-primaryStrokeHalf
+                         disabled:cursor-not-allowed disabled:opacity-50">
+            <span class="text-[12px] font-normal leading-[16px] text-textTertiary transition-colors duration-150 ease-in-out group-hover:text-textSecondary">PnL</span>
+
+            <i class="ri-exchange-dollar-line text-[14px] text-textTertiary transition-colors duration-150 ease-in-out"></i>
+          </button>
+        </div>
+        <div class="flex items-center justify-center gap-[4px]">
+          <span id="pnlValue" class="text-nowrap text-[12px] font-medium leading-[16px] text-textSecondary tabular-nums">&mdash;</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+<div class="p-4" style="padding-top: 0;">
+<div class="w-full text-[12px] px-3 pb-4">
+
+  <div class="mt-4 pt-3 border-t border-primaryStroke">
+    <p class="text-[10px] uppercase tracking-wider text-textTertiary font-semibold mb-2">Basket</p>
+    <div class="flex flex-col gap-[6px]">
+      <% allocations.forEach(function (a) {
+           var tp = (typeof tokenPrices !== 'undefined' && tokenPrices) ? tokenPrices[a.token_address] : undefined; %>
+        <div class="flex items-center gap-1.5 group/tok">
+          <img src="/images/tokens/<%= a.token_address %>" alt="" class="w-4 h-4 rounded-full bg-[#0b0d10] shrink-0" loading="lazy">
+          <span class="text-[11px] text-textSecondary truncate"><%= a.token?.symbol || a.token_address.slice(0, 4) %></span>
+
+          <% if (a.token && a.token.is_verified) { %>
+
+            <svg width="11.5" height="11.5" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg"
+                 class="shrink-0" style="color:#82e58a" aria-label="Verified on jup.ag">
+              <g clip-path="url(#clip_basket_verified)">
+                <path d="M5.24996 7.00001L6.41663 8.16668L9.04163 5.54168M10.4423 2.9158C10.5624 3.20632 10.793 3.43724 11.0833 3.5578L12.1013 3.9795C12.3919 4.09984 12.6227 4.33067 12.743 4.62121C12.8634 4.91175 12.8634 5.23819 12.743 5.52873L12.3217 6.54606C12.2013 6.83673 12.2011 7.1635 12.322 7.45403L12.7427 8.47106C12.8023 8.61496 12.8331 8.7692 12.8331 8.92498C12.8331 9.08075 12.8024 9.23501 12.7428 9.37893C12.6832 9.52285 12.5958 9.65361 12.4857 9.76374C12.3755 9.87388 12.2447 9.96122 12.1008 10.0208L11.0835 10.4422C10.793 10.5623 10.5621 10.7929 10.4415 11.0832L10.0198 12.1013C9.8995 12.3918 9.66868 12.6226 9.37816 12.743C9.08763 12.8633 8.76119 12.8633 8.47067 12.743L7.45337 12.3216C7.16284 12.2015 6.83652 12.2018 6.54617 12.3223L5.52815 12.7434C5.23778 12.8634 4.91163 12.8633 4.62134 12.7431C4.33105 12.6228 4.10036 12.3923 3.97993 12.1021L3.55813 11.0837C3.43801 10.7932 3.20744 10.5623 2.91712 10.4417L1.8991 10.02C1.6087 9.8997 1.37794 9.66902 1.25756 9.37865C1.13717 9.08828 1.13701 8.76198 1.2571 8.47149L1.67848 7.45416C1.79852 7.16362 1.79828 6.83729 1.6778 6.54692L1.25703 5.52813C1.19737 5.38423 1.16665 5.22999 1.16663 5.07421C1.1666 4.91843 1.19727 4.76418 1.25688 4.62026C1.31649 4.47634 1.40388 4.34558 1.51404 4.23545C1.6242 4.12532 1.75499 4.03797 1.89892 3.9784L2.91622 3.55701C3.20647 3.43699 3.43724 3.20671 3.55789 2.91671L3.97957 1.89865C4.09991 1.60811 4.33073 1.37728 4.62126 1.25693C4.91178 1.13659 5.23822 1.13659 5.52874 1.25693L6.54604 1.67833C6.83657 1.79837 7.16289 1.79813 7.45324 1.67764L8.47169 1.25759C8.76218 1.13731 9.08854 1.13734 9.37901 1.25766C9.66948 1.37798 9.90028 1.60874 10.0206 1.8992L10.4424 2.91757L10.4423 2.9158Z"
+                      stroke="currentColor" stroke-width="1.3125" stroke-linecap="round" stroke-linejoin="round"/>
+              </g>
+              <defs><clipPath id="clip_basket_verified"><rect width="14" height="14" fill="currentColor"/></clipPath></defs>
+            </svg>
+          <% } %>
+
+          <button type="button"
+                  class="tok-copy shrink-0 text-textTertiary hover:text-white opacity-0 group-hover/tok:opacity-100 transition-opacity"
+                  data-address="<%= a.token_address %>"
+                  aria-label="Copy address for <%= a.token?.symbol || a.token_address.slice(0, 4) %>">
+            <svg class="w-[11px] h-[11px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
+              <rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/>
+              <path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H3.5A1.5 1.5 0 0 0 2 3.5v5.5a1.5 1.5 0 0 0 1.5 1.5h2"/>
+            </svg>
+          </button>
+
+          <span class="flex-1"></span>
+
+          <span class="text-[11px] tabular-nums text-textTertiary">
+            <% if (tp !== undefined && tp !== null) { %>$<%= fmtPrice(tp) %><% } else { %><span class="text-[#5a616b]">no price</span><% } %>
+          </span>
+          <span class="text-[11px] tabular-nums text-white font-medium w-[38px] text-right"><%= (Number(a.weight) * 100).toFixed(0) %>%</span>
+        </div>
+      <% }); %>
+    </div>
+  </div>
+
+  <div class="mt-4 pt-3 border-t border-primaryStroke">
+
+    <%
+
+      var hasCompetition = !!(mixer.parent_mixer_id || mixer.parent_name)
+        || !!(typeof remixCount !== 'undefined' && remixCount > 0)
+        || !!(typeof competition !== 'undefined' && competition && competition.total > 1);
+    %>
+    <div class="flex items-center justify-between mb-2">
+      <p class="text-[10px] uppercase tracking-wider text-textTertiary font-semibold">
+        <%= hasCompetition ? 'Competition' : 'Thesis' %>
+      </p>
+      <% if (typeof competition !== 'undefined' && competition && competition.rank) { %>
+        <span class="comp-rank <%= competition.isLeader ? 'is-leader' : '' %>">
+          <% if (competition.isLeader) { %>
+            <svg class="w-[9px] h-[9px]" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.3 5.9 20.6l1.4-6.8L2.2 9.1l6.9-.8z"/>
+            </svg>
+            Leading
+          <% } else { %>
+            #<%= competition.rank %><span class="opacity-50">/<%= competition.total %></span>
+          <% } %>
+        </span>
+      <% } %>
+    </div>
+
+    <%
+      var hasParent = !!(mixer.parent_mixer_id || mixer.parent_name);
+      var rc = (typeof remixCount !== 'undefined') ? remixCount : 0;
+      var comp = (typeof competition !== 'undefined') ? competition : null;
+
+      var thesisTitle = mixer.thesis_title || '';
+      var thesisBody  = mixer.thesis || '';
+      var counter     = mixer.counter_thesis || '';
+
+      var LONG = 180;
+      var bodyLong = thesisBody.length > LONG;
+      var counterLong = counter.length > LONG;
+    %>
+
+    <div class="comp-card">
+      <div class="flex items-center gap-1.5 mb-1.5">
+        <svg class="w-3 h-3 shrink-0" style="color:#a78bfa" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 18h6M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/>
+        </svg>
+        <span class="comp-eyebrow"><%= hasParent ? 'The counter-argument' : 'The thesis' %></span>
+      </div>
+
+      <% if (thesisTitle) { %>
+        <p class="text-[12.5px] font-semibold text-white leading-snug"><%= thesisTitle %></p>
+      <% } else { %>
+        <p class="text-[12.5px] font-semibold text-white leading-snug"><%= mixer.name %></p>
+      <% } %>
+
+      <% if (thesisBody) { %>
+        <p class="comp-body mt-1"><%= bodyLong ? thesisBody.slice(0, LONG).trim() + '…' : thesisBody %></p>
+      <% } else if (!thesisTitle) { %>
+        <p class="text-[11px] text-[#5a616b] italic mt-1">No thesis was written for this mixer.</p>
+      <% } %>
+
+      <% if (counter) { %>
+        <div class="mt-2 pt-2" style="border-top:1px solid #1b1f26">
+          <span class="comp-eyebrow" style="color:#f0883e">Why the original is wrong</span>
+          <p class="comp-body mt-1"><%= counterLong ? counter.slice(0, LONG).trim() + '…' : counter %></p>
+        </div>
+      <% } %>
+
+      <%
+
+        var siteHost = null;
+        try {
+          if (mixer.website && /^https?:\/\//i.test(mixer.website)) {
+            siteHost = new URL(mixer.website).hostname.replace(/^www\./, '');
+          }
+        } catch (e) { siteHost = null; }
+      %>
+      <% if (siteHost) { %>
+        <a href="<%= mixer.website %>" target="_blank" rel="noopener noreferrer nofollow ugc"
+           class="thesis-site mt-2" title="<%= mixer.website %>">
+          <svg class="w-[11px] h-[11px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+          </svg>
+          <span class="truncate">Read more on <%= siteHost %></span>
+          <span aria-hidden="true">&#8599;</span>
+        </a>
+      <% } %>
+
+      <% if (bodyLong || counterLong) { %>
+        <button type="button" onclick="openThesis()" class="comp-more">
+          View more
+          <svg class="w-[9px] h-[9px]" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 6l6 6-6 6"/>
+          </svg>
+        </button>
+      <% } %>
+    </div>
+
+    <% if (hasParent) { %>
+      <div class="comp-card mt-1.5">
+        <div class="flex items-center gap-2">
+          <svg class="w-3.5 h-3.5 shrink-0" style="color:#a78bfa" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/>
+            <path d="M18 9a9 9 0 0 1-9 9"/>
+          </svg>
+          <div class="min-w-0 flex-1">
+            <div class="comp-eyebrow">Remixed from</div>
+            <% if (mixer.parent_mixer_id) { %>
+              <a href="/mixer/<%= mixer.parent_mixer_id %>"
+                 class="text-[12px] font-semibold text-[#a78bfa] hover:underline truncate block">
+                <%= mixer.parent_name || 'the original' %>
+              </a>
+            <% } else { %>
+              <span class="text-[12px] font-semibold text-gray-400 truncate block"><%= mixer.parent_name %></span>
+            <% } %>
+          </div>
+          <% if (mixer.parent_mixer_id) { %>
+            <a href="/mixer/<%= mixer.mixer_id %>/compare/<%= mixer.parent_mixer_id %>"
+               class="comp-link shrink-0">Diff</a>
+          <% } %>
+        </div>
+      </div>
+    <% } %>
+
+    <% if (comp && comp.total > 1) { %>
+      <a href="/competition/<%= comp.rootId %>" class="comp-card comp-card-btn mt-1.5 block">
+        <div class="flex items-center justify-between gap-2">
+          <div class="min-w-0">
+            <div class="text-[12px] font-semibold text-white">
+              <%= comp.total %> baskets competing
+            </div>
+            <p class="text-[10.5px] text-textTertiary mt-0.5 leading-snug">
+              <% if (comp.isLeader) { %>
+                This one is winning.
+              <% } else if (comp.rank) { %>
+                This one sits <%= comp.rank %><%=
+                  comp.rank === 1 ? 'st' : comp.rank === 2 ? 'nd' : comp.rank === 3 ? 'rd' : 'th'
+                %>.
+              <% } else { %>
+                See how they rank.
+              <% } %>
+            </p>
+          </div>
+          <span class="comp-link shrink-0">Leaderboard →</span>
+        </div>
+      </a>
+    <% } %>
+
+    <a href="/mixer/<%= mixer.mixer_id %>/remix" class="comp-cta mt-1.5">
+      <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/>
+        <path d="M18 9a9 9 0 0 1-9 9"/>
+      </svg>
+      <span><%= rc > 0 ? 'Enter the competition' : 'Think the weights are wrong? Remix it' %></span>
+    </a>
+  </div>
+
+  <div class="mt-3 flex flex-col gap-1.5">
+    <div class="flex items-center gap-2 rounded-[6px] border border-primaryStroke bg-[#0f1216] px-2.5 py-1.5">
+      <svg class="w-3.5 h-3.5 text-textTertiary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>
+      </svg>
+      <span class="text-[11px] text-textTertiary shrink-0">CA:</span>
+      <span class="text-[11px] font-mono text-[#7453E2] truncate flex-1" title="<%= mixer.mixer_id %>">
+        <%= mixer.mixer_id.slice(0, 10) %>…<%= mixer.mixer_id.slice(-4) %>
+      </span>
+      <button type="button" onclick="copyToClipboard('<%= mixer.mixer_id %>')"
+              class="text-textTertiary hover:text-white transition-colors shrink-0" title="Copy contract address">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
+          <rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/>
+          <path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H3.5A1.5 1.5 0 0 0 2 3.5v5.5a1.5 1.5 0 0 0 1.5 1.5h2"/>
+        </svg>
+      </button>
+      <a href="https://explorer.solana.com/address/<%= mixer.mixer_id %>?cluster=devnet"
+         target="_blank" rel="noopener"
+         class="text-textTertiary hover:text-white transition-colors shrink-0" title="View on Solana explorer">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
+          <circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/>
+        </svg>
+      </a>
+    </div>
+
+    <% if (typeof creatorWallet !== 'undefined' && creatorWallet) { %>
+      <div class="flex items-center gap-2 rounded-[6px] border border-primaryStroke bg-[#0f1216] px-2.5 py-1.5">
+        <svg class="w-3.5 h-3.5 text-textTertiary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M12 3l7 4v6c0 4-3 7-7 8-4-1-7-4-7-8V7z"/>
+        </svg>
+        <span class="text-[11px] text-textTertiary shrink-0">DA:</span>
+        <span class="text-[11px] font-mono text-[#7453E2] truncate flex-1" title="<%= creatorWallet %>">
+          <%= creatorWallet.slice(0, 10) %>…<%= creatorWallet.slice(-4) %>
+        </span>
+        <button type="button" onclick="copyToClipboard('<%= creatorWallet %>')"
+                class="text-textTertiary hover:text-white transition-colors shrink-0" title="Copy developer address">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
+            <rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/>
+            <path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H3.5A1.5 1.5 0 0 0 2 3.5v5.5a1.5 1.5 0 0 0 1.5 1.5h2"/>
+          </svg>
+        </button>
+        <a href="https://explorer.solana.com/address/<%= creatorWallet %>?cluster=devnet"
+           target="_blank" rel="noopener"
+           class="text-textTertiary hover:text-white transition-colors shrink-0" title="View on Solana explorer">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
+            <circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/>
+          </svg>
+        </a>
+      </div>
+    <% } %>
+  </div>
+</div>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div id="thesisModal" class="fixed inset-0 z-[60] items-center justify-center p-4"
+       style="background:rgba(0,0,0,.72)" onclick="if (event.target === this) closeThesis()"
+       role="dialog" aria-modal="true" aria-labelledby="thesisModalTitle">
+    <div class="w-full max-w-[560px] max-h-[82vh] flex flex-col rounded-xl border border-[#21262d] bg-[#101317] shadow-2xl">
+      <div class="flex items-start justify-between gap-4 px-5 pt-4 pb-3 border-b border-[#1b1f26]">
+        <div class="min-w-0">
+          <span class="comp-eyebrow" style="color:#a78bfa">
+            <%= (mixer.parent_mixer_id || mixer.parent_name) ? 'The counter-argument' : 'The thesis' %>
+          </span>
+          <h3 id="thesisModalTitle" class="text-base font-bold text-white mt-1 leading-snug">
+            <%= mixer.thesis_title || mixer.name %>
+          </h3>
+        </div>
+        <button type="button" onclick="closeThesis()" aria-label="Close"
+                class="shrink-0 text-textTertiary hover:text-white transition-colors">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <div class="px-5 py-4 overflow-y-auto hide-scrollbar">
+        <% if (mixer.thesis) { %>
+          <p class="text-[13px] text-gray-300 leading-relaxed whitespace-pre-line"><%= mixer.thesis %></p>
+        <% } else { %>
+          <p class="text-[13px] text-gray-600 italic">No thesis was written for this mixer.</p>
+        <% } %>
+        <% if (typeof siteHost !== 'undefined' && siteHost) { %>
+          <a href="<%= mixer.website %>" target="_blank" rel="noopener noreferrer nofollow ugc"
+             class="thesis-site mt-3" title="<%= mixer.website %>">
+            <span class="truncate">Read more on <%= siteHost %></span>
+            <span aria-hidden="true">&#8599;</span>
+          </a>
+        <% } %>
+
+        <% if (mixer.counter_thesis) { %>
+          <div class="mt-4 pt-4 border-t border-[#1b1f26]">
+            <span class="comp-eyebrow" style="color:#f0883e">
+              Why <%= mixer.parent_name || 'the original' %> is wrong
+            </span>
+            <p class="text-[13px] text-gray-300 leading-relaxed whitespace-pre-line mt-1.5"><%= mixer.counter_thesis %></p>
+          </div>
+        <% } %>
+
+        <% if (mixer.parent_mixer_id || mixer.parent_name) { %>
+          <p class="text-[11px] text-gray-500 mt-4 pt-3 border-t border-[#1b1f26] leading-relaxed">
+            Remixed from
+            <% if (mixer.parent_mixer_id) { %><a href="/mixer/<%= mixer.parent_mixer_id %>" class="text-[#a78bfa] hover:underline"><%= mixer.parent_name || 'the original' %></a><% } else { %><%= mixer.parent_name %><% } %>.
+            This is an independent mixer with its own vault and investors, and the
+            original creator has not endorsed it.
+          </p>
+        <% } %>
+      </div>
+
+      <div class="px-5 py-3 border-t border-[#1b1f26] flex items-center justify-end gap-2">
+        <a href="/mixer/<%= mixer.mixer_id %>/remix"
+           class="text-[11.5px] font-semibold px-3 py-1.5 rounded-lg bg-[#7453E2]/15 border border-[#7453E2]/40 text-[#a78bfa] hover:bg-[#7453E2] hover:text-white transition-colors">
+          Disagree? Remix it
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div id="performance-fullscreen-modal" class="hidden fixed inset-0 bg-black bg-opacity-95 z-50">
+    <div class="h-full flex flex-col">
+      <div class="bg-[#0b0d10] border-b border-gray-800 px-6 py-4 flex items-center justify-between">
+        <h2 class="text-xl font-semibold text-white">Token Performance - Fullscreen</h2>
+        <button
+          onclick="togglePerformanceFullscreen()"
+          class="px-3 py-1.5 bg-[#1a1a1a] hover:bg-[#222] text-white rounded-md text-sm transition">
+          Close
+        </button>
+      </div>
+      <div class="flex-1 p-6 overflow-hidden"></div>
+    </div>
+  </div>
+
+  <script>
+    const MIXER_ID = "<%= mixer.mixer_id %>";
+    window.MIXER_ID = MIXER_ID;
+    const TOKENS = <%- JSON.stringify(allocations.map(a => a.token_address)) %>;
+    const ALLOCATIONS = <%- JSON.stringify(allocations) %>;
+    const PERFORMANCE_DATA = <%- JSON.stringify(performance) %>;
+    const READINESS = <%- JSON.stringify(readiness) %>;
+    window.READINESS = READINESS;
+
+    const pageLoadTime = Date.now();
+
+    function updateLastUpdatedTime() {
+      const now = Date.now();
+      const elapsed = Math.floor((now - pageLoadTime) / 1000);
+      let timeStr = elapsed === 0 ? 'Just now' : elapsed < 60 ? `${elapsed}s ago` : elapsed < 3600 ? `${Math.floor(elapsed / 60)}m ago` : `${Math.floor(elapsed / 3600)}h ago`;
+      const elem = document.getElementById('last-updated');
+      if (elem) elem.textContent = timeStr;
+    }
+
+    setInterval(updateLastUpdatedTime, 1000);
+
+    function copyToClipboard(text) {
+      navigator.clipboard.writeText(text);
+    }
+
+    function openThesis() {
+      const m = document.getElementById('thesisModal');
+      if (!m) return;
+      m.classList.add('is-open');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeThesis() {
+      const m = document.getElementById('thesisModal');
+      if (!m) return;
+      m.classList.remove('is-open');
+      document.body.style.overflow = '';
+    }
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      const m = document.getElementById('thesisModal');
+      if (m && m.classList.contains('is-open')) closeThesis();
+    });
+
+    (function liveHeaderStats() {
+      const POLL_MS = 15000;
+
+      const SIR_BASE = <%- JSON.stringify(
+        (typeof sirBase !== 'undefined' && sirBase !== null) ? sirBase : null
+      ) %>;
+
+      window.updateSirFromPrice = function (price) {
+        const el = document.getElementById('sir-stat');
+        if (!el || !SIR_BASE || !isFinite(price) || price <= 0) return;
+
+        const v = (price / SIR_BASE - 1) * 100;
+        const txt = (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
+        if (el.textContent.trim() === txt) return;
+
+        el.textContent = txt;
+        el.style.color = v >= 0 ? '#22c55e' : '#f6465d';
+      };
+
+      function put(id, text, colourClass) {
+        const el = document.getElementById(id);
+        if (!el) return;
+
+        const next = String(text);
+        if (el.textContent.trim() === next.trim()) {
+
+          if (colourClass !== undefined) applyClass(el, colourClass);
+          return;
+        }
+
+        el.textContent = next;
+        if (colourClass !== undefined) applyClass(el, colourClass);
+
+        el.classList.remove('stat-flash');
+        void el.offsetWidth;
+        el.classList.add('stat-flash');
+      }
+
+      function applyClass(el, cls) {
+        el.classList.remove('price-positive', 'price-negative', 'price-neutral');
+        if (cls) el.classList.add(cls);
+      }
+
+      function pct(v) {
+        if (v === null || v === undefined || !isFinite(v)) return '—';
+        return (v >= 0 ? '+' : '') + Number(v).toFixed(2) + '%';
+      }
+
+      function cls(v) {
+        if (v === null || v === undefined || !isFinite(v)) return 'price-neutral';
+        return v > 0 ? 'price-positive' : (v < 0 ? 'price-negative' : 'price-neutral');
+      }
+
+      async function tick() {
+        let d;
+        try {
+          const r = await fetch('/mixer/' + MIXER_ID + '/live-stats',
+                                { headers: { Accept: 'application/json' } });
+          if (!r.ok) return;
+          d = await r.json();
+          if (!d || !d.ok) return;
+        } catch {
+          return;
+        }
+
+        const ch = d.changes || {};
+        put('change-5m', pct(ch['5m']), cls(ch['5m']));
+        put('change-1h', pct(ch['1h']), cls(ch['1h']));
+        put('change-6h', pct(ch['6h']), cls(ch['6h']));
+        put('change-24h', pct(ch['24h']), cls(ch['24h']));
+
+        put('change-24h-stat', pct(ch['24h']), cls(ch['24h']));
+
+        if (d.volume24h !== null && d.volume24h !== undefined) {
+          put('volume-24h', Number(d.volume24h).toFixed(3));
+        }
+        if (d.holders !== null && d.holders !== undefined) {
+          put('holders-stat', String(d.holders));
+        }
+
+        const sirEl = document.getElementById('sir-stat');
+        if (sirEl && d.sir !== null && d.sir !== undefined && isFinite(d.sir)) {
+          const txt = pct(d.sir);
+          if (sirEl.textContent.trim() !== txt) {
+            sirEl.textContent = txt;
+            sirEl.style.color = d.sir >= 0 ? '#22c55e' : '#f6465d';
+            sirEl.classList.remove('stat-flash');
+            void sirEl.offsetWidth;
+            sirEl.classList.add('stat-flash');
+          }
+        }
+      }
+
+      let timer = null;
+      function start() {
+        if (timer) return;
+        tick();
+        timer = setInterval(tick, POLL_MS);
+      }
+      function stop() {
+        if (!timer) return;
+        clearInterval(timer);
+        timer = null;
+      }
+
+      document.addEventListener('visibilitychange', function () {
+        if (document.hidden) stop(); else start();
+      });
+
+      start();
+    })();
+
+    function shareMixer(btn) {
+      var url = window.location.origin + '/mixer/' + MIXER_ID;
+      var title = <%- JSON.stringify(mixer.ticker + ' — ' + mixer.name) %>;
+
+      function copied() {
+        var original = btn.innerHTML;
+        btn.innerHTML =
+          '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+          'stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+        setTimeout(function () { btn.innerHTML = original; }, 1400);
+      }
+
+      if (navigator.share) {
+        navigator.share({ title: title, url: url })
+          .catch(function () {  });
+        return;
+      }
+      navigator.clipboard.writeText(url).then(copied).catch(function () {});
+    }
+
+    function copyTokenAddress(event, address) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const btn = event.currentTarget;
+      navigator.clipboard.writeText(address).then(() => {
+        const original = btn.innerHTML;
+        btn.classList.add('copied');
+        btn.innerHTML =
+          '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+          'stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+          '<polyline points="20 6 9 17 4 12"/></svg>';
+        setTimeout(() => {
+          btn.classList.remove('copied');
+          btn.innerHTML = original;
+        }, 1200);
+      });
+    }
+
+    (function () {
+      var tip = null;
+
+      function ensureTip() {
+        if (tip) return tip;
+        tip = document.createElement('div');
+        tip.style.cssText = [
+          'position:fixed', 'z-index:80', 'display:none', 'pointer-events:none',
+          'background:#14161B', 'border:1px solid #2C2C2C', 'border-radius:6px',
+          'padding:5px 8px', 'box-shadow:0 6px 18px rgba(0,0,0,.5)',
+          'font-size:10.5px', 'color:#e5e7eb', 'white-space:nowrap',
+        ].join(';');
+        document.body.appendChild(tip);
+        return tip;
+      }
+
+      function tipTarget(e) {
+        if (!e.target.closest) return null;
+        return e.target.closest('.tok-copy, [data-tip]');
+      }
+
+      document.addEventListener('mouseover', function (e) {
+        var btn = tipTarget(e);
+        if (!btn) return;
+        var text = btn.dataset.tip || btn.dataset.address || '';
+        if (!text) return;
+
+        var t = ensureTip();
+        t.textContent = text;
+
+        t.style.fontFamily = btn.dataset.tip ? 'inherit' : 'ui-monospace,monospace';
+        t.style.display = 'block';
+        var r = btn.getBoundingClientRect();
+
+        t.style.top = (r.top - t.offsetHeight - 6) + 'px';
+        t.style.left = Math.max(6, r.left + r.width / 2 - t.offsetWidth / 2) + 'px';
+      });
+
+      document.addEventListener('mouseout', function (e) {
+        if (tipTarget(e) && tip) tip.style.display = 'none';
+      });
+
+      document.addEventListener('click', function (e) {
+        var btn = e.target.closest ? e.target.closest('.tok-copy') : null;
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (tip) tip.style.display = 'none';
+        copyTokenAddress({
+          preventDefault: function () {},
+          stopPropagation: function () {},
+          currentTarget: btn,
+        }, btn.dataset.address);
+      });
+    })();
+
+    const TF_LABEL = {
+      15: '15s', 30: '30s', 60: '1m', 300: '5m',
+      900: '15m', 1800: '30m', 3600: '1h', 14400: '4h',
+    };
+
+    function switchTimeframe(seconds) {
+      if (window.changeTimeframe) window.changeTimeframe(seconds);
+
+      const label = document.getElementById('tfLabel');
+      if (label) label.textContent = TF_LABEL[seconds] || (seconds + 's');
+
+      document.querySelectorAll('#tfPop .ct-item').forEach(function (b) {
+        b.classList.toggle('is-active', Number(b.dataset.tf) === Number(seconds));
+      });
+
+      try { localStorage.setItem('mixer.tf', String(seconds)); } catch {  }
+    }
+
+    (function chartToolbar() {
+
+      const menus = [
+        { trigger: 'tfTrigger', pop: 'tfPop' },
+        { trigger: 'styleTrigger', pop: 'stylePop' },
+      ];
+
+      function closeAll(except) {
+        menus.forEach(function (m) {
+          if (m.pop === except) return;
+          const p = document.getElementById(m.pop);
+          const t = document.getElementById(m.trigger);
+          if (p) p.classList.remove('is-open');
+          if (t) { t.classList.remove('is-open'); t.setAttribute('aria-expanded', 'false'); }
+        });
+      }
+
+      menus.forEach(function (m) {
+        const trigger = document.getElementById(m.trigger);
+        const pop = document.getElementById(m.pop);
+        if (!trigger || !pop) return;
+
+        trigger.addEventListener('click', function (e) {
+          e.stopPropagation();
+          const open = pop.classList.contains('is-open');
+          closeAll(m.pop);
+          pop.classList.toggle('is-open', !open);
+          trigger.classList.toggle('is-open', !open);
+          trigger.setAttribute('aria-expanded', String(!open));
+        });
+      });
+
+      document.addEventListener('click', function () { closeAll(); });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') closeAll();
+      });
+
+      const tfPop = document.getElementById('tfPop');
+      if (tfPop) {
+        tfPop.addEventListener('click', function (e) {
+          const item = e.target.closest('.ct-item');
+          if (!item) return;
+          switchTimeframe(Number(item.dataset.tf));
+          closeAll();
+        });
+      }
+
+      const stylePop = document.getElementById('stylePop');
+      if (stylePop) {
+        stylePop.addEventListener('click', function (e) {
+          const item = e.target.closest('.ct-item');
+          if (!item) return;
+          setChartStyle(item.dataset.style);
+          closeAll();
+        });
+      }
+
+      function setChartStyle(style) {
+        if (window.setChartStyle) window.setChartStyle(style);
+
+        document.querySelectorAll('#stylePop .ct-item').forEach(function (b) {
+          b.classList.toggle('is-active', b.dataset.style === style);
+        });
+
+        const chosen = document.querySelector('#stylePop .ct-item[data-style="' + style + '"] .ct-glyph');
+        const icon = document.getElementById('styleIcon');
+        if (chosen && icon) icon.innerHTML = chosen.innerHTML;
+
+        try { localStorage.setItem('mixer.chartStyle', style); } catch {  }
+      }
+
+      function restore() {
+        let tf = 15, style = 'candles';
+        try {
+          tf = Number(localStorage.getItem('mixer.tf')) || 15;
+          style = localStorage.getItem('mixer.chartStyle') || 'candles';
+        } catch {  }
+
+        if (window.changeTimeframe) switchTimeframe(tf);
+        else document.querySelectorAll('#tfPop .ct-item').forEach(function (b) {
+          b.classList.toggle('is-active', Number(b.dataset.tf) === tf);
+        });
+
+        if (window.setChartStyle) setChartStyle(style);
+      }
+
+      if (window.setChartStyle) restore();
+      else window.addEventListener('mixerchart:ready', restore, { once: true });
+    })();
+
+    function switchTab(tabName) {
+      document.querySelectorAll('.tab-content').forEach(content => content.classList.add('hidden'));
+      document.querySelectorAll('.tab-button').forEach(button => button.classList.remove('active'));
+      document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+      document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+
+      if (tabName === 'allocations' && !window.pieChartInitialized) {
+        initPieChart();
+      }
+
+      if (tabName === 'position' && window.refreshHoldings) {
+        window.refreshHoldings();
+      }
+
+      if (tabName === 'holders' && window.MixerLive) {
+        window.MixerLive.loadHolders();
+      }
+
+      if (tabName === 'performance' && !window.performanceChartInitialized) {
+        setTimeout(() => {
+          initPerformanceChart(PERFORMANCE_DATA);
+          window.performanceChartInitialized = true;
+        }, 100);
+      }
+    }
+
+    document.querySelectorAll('.fund-card-t').forEach(function (el) {
+      el.addEventListener('click', function () {
+        if (el.dataset.href) window.location.href = el.dataset.href;
+      });
+    });
+
+    function initPieChart() {
+      const ctx = document.getElementById('allocation-pie-chart');
+      if (!ctx) return;
+
+      const colors = ['#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#3b82f6', '#ef4444'];
+      const labels = ALLOCATIONS.map((a) => a.token?.symbol || a.token?.name || 'Unknown');
+      const weights = ALLOCATIONS.map(a => (a.weight || 0) * 100);
+
+      new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: weights,
+            backgroundColor: colors.slice(0, ALLOCATIONS.length),
+            borderColor: '#0B0D10',
+            borderWidth: 3
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#0b0d10',
+              titleColor: '#C9D1D9',
+              bodyColor: '#C9D1D9',
+              borderColor: '#2d3748',
+              borderWidth: 1
+            }
+          }
+        }
+      });
+
+      window.pieChartInitialized = true;
+    }
+
+    (function() {
+      const adjuster = document.getElementById('chart-adjuster');
+      const chartContainer = document.getElementById('chart-container');
+      let isResizing = false;
+      let startY = 0;
+      let startHeight = 0;
+
+      adjuster.addEventListener('mousedown', (e) => {
+        isResizing = true;
+        startY = e.clientY;
+        startHeight = chartContainer.offsetHeight;
+        document.body.style.cursor = 'ns-resize';
+        document.body.style.userSelect = 'none';
+        e.preventDefault();
+      });
+
+      document.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+        const delta = e.clientY - startY;
+        const newHeight = Math.max(300, Math.min(800, startHeight + delta));
+        chartContainer.style.height = newHeight + 'px';
+      });
+
+      document.addEventListener('mouseup', () => {
+        if (isResizing) {
+          isResizing = false;
+          document.body.style.cursor = '';
+          document.body.style.userSelect = '';
+        }
+      });
+    })();
+  </script>
+  <script src="/js/mixerChart.js"></script>
+  <script src="/js/tokenPerformanceChart.js"></script>
+  <script>
+
+    let side = "buy";
+    let type = "market";
+
+    let limitOrderPriceLine = null;
+
+    const buyTab = document.getElementById("buyTab");
+    const sellTab = document.getElementById("sellTab");
+    const marketTab = document.getElementById("marketTab");
+    const limitTab = document.getElementById("limitTab");
+
+    const marketContent = document.getElementById("marketContent");
+    const limitContent = document.getElementById("limitContent");
+
+    let livePriceEl = document.getElementById("live-mixer-price");
+    if (!livePriceEl) {
+      livePriceEl = document.createElement("div");
+      livePriceEl.id = "live-mixer-price";
+      livePriceEl.style.display = "none";
+      livePriceEl.innerText = "0.5000";
+      document.body.appendChild(livePriceEl);
+    }
+
+    function getBasePrice() {
+      const el = document.getElementById("live-mixer-price");
+      const n = el ? parseFloat(String(el.innerText).replace(/[^0-9eE.+-]/g, '')) : NaN;
+
+      return Number.isFinite(n) && n > 0 ? n : 0;
+    }
+
+    function updateLimitOrderLine(price) {
+      if (!window.candleSeries) {
+        console.warn('Chart not initialized yet');
+        return;
+      }
+
+      if (limitOrderPriceLine) {
+        try { window.candleSeries.removePriceLine(limitOrderPriceLine); } catch {  }
+        limitOrderPriceLine = null;
+      }
+
+      if (price && price > 0) {
+        const lineColor = side === 'buy' ? '#22c55e' : '#f6465d';
+
+        limitOrderPriceLine = window.candleSeries.createPriceLine({
+          price: price,
+          color: lineColor,
+          lineWidth: 2,
+          lineStyle: LightweightCharts.LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: `${side === 'buy' ? 'Buy' : 'Sell'} Limit @ $${price.toFixed(4)}`,
+        });
+      }
+    }
+
+    function removeLimitOrderLine() {
+      if (limitOrderPriceLine && window.candleSeries) {
+        try { window.candleSeries.removePriceLine(limitOrderPriceLine); } catch {  }
+        limitOrderPriceLine = null;
+      }
+    }
+
+    window.addEventListener('mixerchart:serieschanged', function () {
+      limitOrderPriceLine = null;
+      var input = document.getElementById('limitPrice');
+      var price = input ? parseFloat(input.value) : NaN;
+      if (isFinite(price) && price > 0) updateLimitOrderLine(price);
+    });
+
+    const MIXER_TICKER = <%- JSON.stringify(mixer.ticker) %>;
+    const MIXER_IMAGE = <%- JSON.stringify((mixer.image && mixer.image.trim()) ? mixer.image : '/images/tokens/' + (allocations[0] ? allocations[0].token_address : 'none')) %>;
+
+    let SOL_ICON_HTML = null;
+    let lastUnitSide = null;
+
+    function syncAmountUnit() {
+      const icon = document.getElementById('marketUnitIcon');
+      const label = side === 'sell' ? MIXER_TICKER : 'SOL';
+
+      const hint = document.getElementById('minTradeHint');
+      if (hint && window.mixerMinTrade) {
+        window.mixerMinTrade().then(function (m) {
+          if (!m) return;
+          hint.textContent = side === 'sell'
+            ? 'Minimum sell $' + m.usd + ' (≈' + m.sol.toFixed(4) + ' SOL), or your whole position'
+            : 'Minimum buy $' + m.usd + ' (≈' + m.sol.toFixed(4) + ' SOL)';
+        });
+      }
+
+      if (icon && SOL_ICON_HTML === null) SOL_ICON_HTML = icon.innerHTML;
+
+      ['marketUnit', 'limitUnit'].forEach(function (id) {
+        const el = document.getElementById(id);
+        if (el && el.textContent !== label) el.textContent = label;
+      });
+
+      if (icon && icon.dataset.unit !== label) {
+        icon.dataset.unit = label;
+        icon.innerHTML = side === 'sell'
+          ? '<img src="' + MIXER_IMAGE + '" alt="" class="w-[14px] h-[14px] rounded-full object-cover">'
+          : SOL_ICON_HTML;
+      }
+
+      if (lastUnitSide !== null && lastUnitSide !== side) {
+        ['marketAmount', 'limitAmount'].forEach(function (id) {
+          const el = document.getElementById(id);
+          if (el) el.value = '';
+        });
+      }
+      lastUnitSide = side;
+    }
+
+    window.focusBuy = function () {
+      if (side !== 'buy') buyTab.onclick();
+      if (type !== 'market') marketTab.onclick();
+      const input = document.getElementById('marketAmount');
+      if (input) { input.focus(); input.select(); }
+    };
+
+    function unitsToPercent(amount) {
+      const pos = window.POSITION;
+      if (!pos || !pos.units) {
+        Alerts.error('You have no ' + MIXER_TICKER + ' to sell');
+        return null;
+      }
+      if (amount > pos.units * 1.0001) {
+        Alerts.error('Not enough ' + MIXER_TICKER, {
+          detail: 'You hold ' + fmtUnits(pos.units) + ' ' + MIXER_TICKER + '.'
+        });
+        return null;
+      }
+
+      return amount >= pos.units * 0.995 ? 100 : (amount / pos.units) * 100;
+    }
+
+    function syncQuickAmounts(context) {
+      const row = document.getElementById(context + 'Quick');
+      if (!row) return;
+
+      const spec = side === 'buy'
+        ? [['0.1', "setAmount('" + context + "',0.1)"],
+           ['0.5', "setAmount('" + context + "',0.5)"],
+           ['1',   "setAmount('" + context + "',1)"],
+           ['MAX', 'setMaxAmount()']]
+        : [['25%',  "setPercentAmount('" + context + "',25)"],
+           ['50%',  "setPercentAmount('" + context + "',50)"],
+           ['75%',  "setPercentAmount('" + context + "',75)"],
+           ['100%', "setPercentAmount('" + context + "',100)"]];
+
+      const buttons = row.querySelectorAll('button');
+      buttons.forEach(function (b, i) {
+        if (!spec[i]) return;
+        b.textContent = spec[i][0];
+        b.setAttribute('onclick', spec[i][1]);
+      });
+    }
+
+    function updateUI() {
+
+      const indicator = document.getElementById("tabIndicator");
+
+      const tabBase = "flex-1 py-[7px] rounded-[4px] text-[12.5px] font-semibold transition-colors";
+      buyTab.className = side === "buy"
+        ? tabBase + " bg-[#16a34a] text-white"
+        : tabBase + " text-textSecondary hover:text-white";
+
+      sellTab.className = side === "sell"
+        ? tabBase + " bg-[#dc2626] text-white"
+        : tabBase + " text-textSecondary hover:text-white";
+
+      if (type === "market") {
+        marketContent.classList.remove("hidden");
+        limitContent.classList.add("hidden");
+
+        indicator.style.left = "0%";
+        marketTab.classList.add("text-white");
+        marketTab.classList.remove("text-textSecondary");
+        limitTab.classList.add("text-textSecondary");
+        limitTab.classList.remove("text-white");
+
+        removeLimitOrderLine();
+
+      } else {
+        limitContent.classList.remove("hidden");
+        marketContent.classList.add("hidden");
+
+        indicator.style.left = "50%";
+        limitTab.classList.add("text-white");
+        limitTab.classList.remove("text-textSecondary");
+        marketTab.classList.add("text-textSecondary");
+        marketTab.classList.remove("text-white");
+      }
+
+      syncQuickAmounts("market");
+      syncQuickAmounts("limit");
+      syncAmountUnit();
+
+      initLimitLogic();
+      initButtons();
+    }
+
+    let limitLogicBound = false;
+
+    function relabelLimitButton() {
+      const limitButton = document.getElementById("limitButton");
+      const limitPrice = document.getElementById("limitPrice");
+      if (!limitButton || !limitPrice) return;
+      const val = parseFloat(limitPrice.value);
+      limitButton.textContent = `${side === "buy" ? "Buy" : "Sell"} @ ` +
+        (isFinite(val) ? Number(val).toFixed(4) : "—");
+    }
+
+    function initLimitLogic() {
+      if (limitLogicBound) {
+        relabelLimitButton();
+
+        if (type === "limit") {
+          const p = parseFloat(document.getElementById("limitPrice").value);
+          if (isFinite(p) && p > 0) updateLimitOrderLine(p);
+        } else {
+          removeLimitOrderLine();
+        }
+        return;
+      }
+      limitLogicBound = true;
+
+      const limitPrice = document.getElementById("limitPrice");
+      const limitButton = document.getElementById("limitButton");
+      const hint = document.getElementById("limitHint");
+      if (!limitPrice || !limitButton) return;
+
+      function updateHint(priceVal) {
+        if (!hint) return;
+        const base = getBasePrice();
+        if (!isFinite(priceVal) || priceVal <= 0 || !isFinite(base) || base <= 0) {
+          hint.textContent = "";
+          return;
+        }
+        const delta = ((priceVal / base) - 1) * 100;
+        const dir = delta >= 0 ? "above" : "below";
+        hint.textContent =
+          'Fills when the price goes ' + (side === "buy" ? 'down to' : 'up to') +
+          ' $' + Number(priceVal).toFixed(4) +
+          ' (' + Math.abs(delta).toFixed(1) + '% ' + dir + ' current).';
+      }
+
+      function syncFromPrice() {
+        const val = parseFloat(limitPrice.value);
+        relabelLimitButton();
+        updateHint(val);
+
+        if (type !== "limit") { removeLimitOrderLine(); return; }
+        if (isFinite(val) && val > 0) updateLimitOrderLine(val);
+        else removeLimitOrderLine();
+      }
+
+      limitPrice.addEventListener("input", syncFromPrice);
+      limitPrice.addEventListener("blur", syncFromPrice);
+
+      limitPrice.addEventListener("change", syncFromPrice);
+
+      const sessionBase = getBasePrice();
+      if (isFinite(sessionBase) && sessionBase > 0 && !limitPrice.value) {
+        limitPrice.value = sessionBase.toFixed(4);
+      }
+      syncFromPrice();
+    }
+
+    function setAmount(context, val) {
+      document.getElementById(context + "Amount").value = val;
+    }
+
+    async function setPercentAmount(context, p) {
+      const input = document.getElementById(context + "Amount");
+      if (!input) return;
+
+      if (side !== 'sell') {
+        try {
+          const r = await fetch('/wallet/devnet-balance', { headers: { Accept: 'application/json' } });
+          const d = await r.json();
+          const bal = Math.max(0, Number(d.balance || 0) - 0.025);
+          input.value = (bal * (p / 100)).toFixed(4);
+          input.dispatchEvent(new Event('input'));
+        } catch {  }
+        return;
+      }
+
+      if (!window.POSITION && window.refreshHoldings) await window.refreshHoldings();
+      const pos = window.POSITION;
+      if (!pos || !pos.units) {
+        Alerts.info('You have no ' + MIXER_TICKER + ' to sell');
+        return;
+      }
+
+      input.value = String(Math.floor(pos.units * (p / 100) * 1e6) / 1e6);
+      input.dispatchEvent(new Event('input'));
+    }
+
+    async function setMaxAmount() {
+      if (side === 'sell') return setPercentAmount('market', 100);
+
+      const input = document.getElementById('marketAmount');
+      const btn = document.getElementById('maxBtn');
+      if (!input) return;
+
+      const original = btn ? btn.textContent : '';
+      if (btn) btn.textContent = '…';
+
+      try {
+        const r = await fetch('/wallet/devnet-balance', { headers: { Accept: 'application/json' } });
+        const d = await r.json();
+        const bal = Number(d.balance || 0);
+        const RESERVE = 0.025;
+        input.value = Math.max(0, bal - RESERVE).toFixed(4);
+        input.dispatchEvent(new Event('input'));
+      } catch (e) {
+
+      } finally {
+        if (btn) btn.textContent = original || 'MAX';
+      }
+    }
+
+    let PNL_POSITION = null;
+
+    let PNL_UNIT = 'USD';
+    try {
+      const saved = localStorage.getItem('mixer.pnlUnit');
+      if (saved === 'USD' || saved === 'SOL') PNL_UNIT = saved;
+    } catch {  }
+
+    function togglePnlUnit() {
+      PNL_UNIT = PNL_UNIT === 'SOL' ? 'USD' : 'SOL';
+      try { localStorage.setItem('mixer.pnlUnit', PNL_UNIT); } catch {  }
+      renderPnlStrip();
+    }
+
+    function renderPnlStrip() {
+      const strip = document.getElementById('pnlStrip');
+      if (!strip) return;
+
+      const rate = Number(window.SOL_USD);
+      const usable = PNL_UNIT === 'USD' && isFinite(rate) && rate > 0;
+
+      const fmt = function (sol) {
+        if (sol == null || !isFinite(Number(sol))) return '—';
+        const n = Number(sol);
+        const neg = n < 0;
+        const mag = Math.abs(n);
+        if (usable) {
+          const usd = mag * rate;
+          return (neg ? '-' : '') + '$' + (usd >= 1 ? usd.toFixed(2) : usd.toFixed(4));
+        }
+        return (neg ? '-' : '') + mag.toFixed(4);
+      };
+
+      const set = function (id, text, colour) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = text;
+        if (colour) el.style.color = colour;
+      };
+
+      const p = (PNL_POSITION && PNL_POSITION.exists) ? PNL_POSITION : {};
+
+      const GAIN = '#82e58a';
+      const LOSS = '#f6465d';
+      const FLAT = '#9ca3af';
+
+      const directional = function (v, colour) {
+        const n = Number(v);
+        return (isFinite(n) && n > 0) ? colour : FLAT;
+      };
+
+      set('pnlBought', fmt(p.boughtSol), directional(p.boughtSol, GAIN));
+      set('pnlSold', fmt(p.soldSol), directional(p.soldSol, LOSS));
+
+      set('pnlHolding', fmt(p.remainingSol), FLAT);
+
+      const pnl = p.unrealisedPnl;
+      const known = pnl != null && isFinite(pnl);
+      let pnlColour = FLAT;
+
+      if (!known) {
+        set('pnlValue', '—', FLAT);
+      } else {
+        const up = pnl >= 0;
+        pnlColour = up ? GAIN : LOSS;
+        const pct = (p.unrealisedPct != null && isFinite(p.unrealisedPct))
+          ? ' (' + (up ? '+' : '') + Number(p.unrealisedPct).toFixed(0) + '%)'
+          : '';
+
+        set('pnlValue', (up ? '+' : '') + fmt(pnl) + pct, pnlColour);
+      }
+
+      const icon = document.querySelector('#pnlUnitToggle i');
+      if (icon) icon.style.color = pnlColour;
+
+      const btn = document.getElementById('pnlUnitToggle');
+      if (btn) btn.title = 'Showing ' + (usable ? 'USD' : 'SOL') + ' — click to switch';
+    }
+
+    window.POSITION = null;
+
+    const POS_SYMBOL = {};
+    const POS_LOGO = {};
+    ALLOCATIONS.forEach(function (a) {
+      const sym = (a.token && (a.token.symbol || a.token.name)) || a.token_address.slice(0, 4);
+      [a.mirror_mint, a.token_address].forEach(function (k) {
+        if (!k) return;
+        POS_SYMBOL[k] = sym;
+        POS_LOGO[k] = '/images/tokens/' + a.token_address;
+      });
+    });
+
+    const POS_GAIN = '#22c55e';
+    const POS_LOSS = '#f6465d';
+    const POS_FLAT = '#9ca3af';
+
+    function posSet(id, text, colour) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (el.textContent !== text) el.textContent = text;
+      el.style.color = colour || '';
+    }
+
+    function fmtSol(n, dp) {
+      return (n == null || !isFinite(n)) ? '—' : Number(n).toFixed(dp == null ? 4 : dp);
+    }
+
+    function fmtUnits(n) {
+      if (n == null || !isFinite(n)) return '—';
+      const a = Math.abs(n);
+      const dp = a >= 1000 ? 2 : a >= 1 ? 4 : 6;
+      return Number(n).toLocaleString('en-US', { minimumFractionDigits: Math.min(dp, 2), maximumFractionDigits: dp });
+    }
+
+    function fmtTokenAmount(raw, decimals) {
+      const n = Number(raw) / Math.pow(10, decimals || 0);
+      if (!isFinite(n)) return '—';
+      const a = Math.abs(n);
+      if (a >= 1e9) return (n / 1e9).toFixed(2) + 'B';
+      if (a >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+      if (a >= 1e3) return n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+      if (a >= 1) return n.toFixed(2);
+      return n.toPrecision(3);
+    }
+
+    function fmtHeld(ms) {
+      if (ms == null || !isFinite(ms)) return '—';
+      const m = Math.floor(ms / 60000);
+      const h = Math.floor(m / 60);
+      const d = Math.floor(h / 24);
+      return d > 0 ? d + 'd ' + (h % 24) + 'h' : h > 0 ? h + 'h ' + (m % 60) + 'm' : Math.max(1, m) + 'm';
+    }
+
+    function signedSol(n) {
+      return (n >= 0 ? '+' : '') + Number(n).toFixed(4) + ' SOL';
+    }
+
+    let holdingsInFlight = null;
+
+    function refreshHoldings() {
+      if (!holdingsInFlight) {
+        holdingsInFlight = loadHoldings().finally(function () { holdingsInFlight = null; });
+      }
+      return holdingsInFlight;
+    }
+
+    async function loadHoldings() {
+      const panel = document.getElementById('positionPanel');
+      const opts = { headers: { Accept: 'application/json' } };
+
+      let v = null, h = null;
+      try {
+        const res = await Promise.all([
+          fetch('/mixer/' + MIXER_ID + '/value', opts),
+          fetch('/mixer/' + MIXER_ID + '/my-position', opts),
+        ]);
+        v = res[0].ok ? await res[0].json() : null;
+        h = res[1].ok ? await res[1].json() : null;
+      } catch (e) {
+        return;
+      }
+
+      const held = v && v.exists && Number(v.solValue) > 0;
+
+      if (!held) {
+        window.POSITION = null;
+        PNL_POSITION = h;
+        renderPnlStrip();
+        if (!panel) return;
+
+        const sub = document.getElementById('posEmptySub');
+        if (sub && h && h.everHeld && h.realisedPnl != null && isFinite(h.realisedPnl)) {
+          sub.textContent = 'You sold out of this position with ' +
+            signedSol(Number(h.realisedPnl)) + ' realised.';
+        }
+        panel.dataset.state = 'empty';
+        return;
+      }
+
+      const sol = Number(v.solValue);
+      const units = Number(v.units);
+      const cost = (h && h.exists && h.costOfRemaining != null && isFinite(h.costOfRemaining))
+        ? Number(h.costOfRemaining)
+        : (v.costSol != null ? Number(v.costSol) : null);
+      const pnl = cost != null ? sol - cost : null;
+      const pnlPct = cost > 0 ? (pnl / cost) * 100 : null;
+
+      window.POSITION = {
+        shares: v.shares,
+        solValue: sol,
+        units: isFinite(units) && units > 0 ? units : null,
+      };
+
+      PNL_POSITION = Object.assign({}, h || {}, {
+        exists: true, remainingSol: sol, unrealisedPnl: pnl, unrealisedPct: pnlPct,
+      });
+      renderPnlStrip();
+
+      if (!panel) return;
+
+      posSet('posUnits', fmtUnits(window.POSITION.units));
+      posSet('posSol', fmtSol(sol));
+      posSet('posUsd', v.usdValue > 0
+        ? ' · $' + Number(v.usdValue).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        : '');
+
+      if (pnl == null) {
+        posSet('posPnl', '—', POS_FLAT);
+        posSet('posPnlPct', '—', POS_FLAT);
+        posSet('posPnlBasis', ' · no cost basis recorded');
+      } else {
+        const c = pnl >= 0 ? POS_GAIN : POS_LOSS;
+        posSet('posPnl', signedSol(pnl), c);
+        posSet('posPnlPct', pnlPct != null ? (pnl >= 0 ? '+' : '') + pnlPct.toFixed(2) + '%' : '—', c);
+        posSet('posPnlBasis', ' · on ' + fmtSol(cost) + ' SOL cost');
+      }
+
+      const realised = (h && h.realisedPnl != null && isFinite(h.realisedPnl)) ? Number(h.realisedPnl) : null;
+      if (realised == null) {
+        posSet('posRealised', '—', POS_FLAT);
+        posSet('posRealisedSub', 'Nothing sold yet');
+      } else {
+        posSet('posRealised', signedSol(realised), realised >= 0 ? POS_GAIN : POS_LOSS);
+        posSet('posRealisedSub', 'On ' + fmtSol(h.soldSol) + ' SOL sold');
+      }
+
+      const own = Number(v.ownershipPct);
+      posSet('posOwn', isFinite(own) ? (own < 0.01 ? '<0.01%' : own.toFixed(2) + '%') : '—');
+      const bar = document.getElementById('posOwnBar');
+      if (bar) bar.style.width = (isFinite(own) ? Math.max(1, Math.min(100, own)) : 0) + '%';
+
+      const legs = (Array.isArray(v.legs) ? v.legs.slice() : [])
+        .sort(function (a, b) { return Number(b.solOut) - Number(a.solOut); });
+      const body = document.getElementById('posLegs');
+      if (body) {
+        const html = legs.length ? legs.map(function (l) {
+          const legSol = Number(l.solOut) || 0;
+          const share = sol > 0 ? (legSol / sol) * 100 : 0;
+          const sym = POS_SYMBOL[l.mint] || l.mint.slice(0, 4);
+          const logo = POS_LOGO[l.mint] || '';
+          return '<tr>' +
+            '<td><div class="flex items-center gap-2 min-w-0">' +
+              '<img src="' + logo + '" alt="" loading="lazy" class="w-5 h-5 rounded-full bg-[#16171D] shrink-0">' +
+              '<span class="text-white font-medium truncate">' + sym + '</span></div></td>' +
+            '<td><div class="flex items-center gap-2">' +
+              '<div class="flex-1 h-[5px] rounded-full bg-[#1a1d23] overflow-hidden">' +
+                '<div class="h-full rounded-full" style="width:' + share.toFixed(1) + '%;background:#7453E2"></div></div>' +
+              '<span class="text-gray-400 w-[44px] text-right">' + share.toFixed(1) + '%</span></div></td>' +
+            '<td class="text-right text-gray-300">' + fmtTokenAmount(l.tokensOut, l.decimals) + '</td>' +
+            '<td class="text-right"><span class="text-white">' + legSol.toFixed(4) + '</span>' +
+              ' <span class="text-gray-500">SOL</span></td>' +
+            '</tr>';
+        }).join('') : '<tr><td colspan="4" class="text-center text-gray-500">No holdings to break down.</td></tr>';
+        if (body.dataset.html !== html) {
+          body.innerHTML = html;
+          body.dataset.html = html;
+        }
+      }
+
+      const avgBuyUsd = h && h.avgBuyPriceUsd != null && isFinite(h.avgBuyPriceUsd)
+        ? Number(h.avgBuyPriceUsd) : null;
+      posSet('posAvgBuy', avgBuyUsd != null
+        ? '$' + avgBuyUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })
+        : '—');
+      posSet('posCost', cost != null ? fmtSol(cost) + ' SOL' : '—');
+      posSet('posBought', h && h.boughtSol != null ? fmtSol(h.boughtSol) + ' SOL' : '—');
+      posSet('posSold', h && Number(h.soldSol) > 0 ? fmtSol(h.soldSol) + ' SOL' : '—');
+      posSet('posHeld', fmtHeld(h && h.heldMs));
+      posSet('posTrades', h && h.tradeCount != null ? String(h.tradeCount) : '—');
+
+      panel.dataset.state = 'held';
+    }
+
+    window.refreshHoldings = refreshHoldings;
+
+    window.refreshPosition = refreshHoldings;
+    refreshHoldings();
+
+    (function memeCountdown() {
+      const chip = document.getElementById('memeChip');
+      if (!chip) return;
+
+      const text = document.getElementById('memeChipText');
+      const expiresAt = Number(chip.dataset.expires);
+      if (!isFinite(expiresAt)) return;
+
+      let reloaded = false;
+
+      function fmt(ms) {
+        const s = Math.max(0, Math.floor(ms / 1000));
+        const d = Math.floor(s / 86400);
+        const h = Math.floor((s % 86400) / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        const sec = s % 60;
+        if (d > 0) return d + 'd ' + h + 'h';
+        if (h > 0) return h + 'h ' + String(m).padStart(2, '0') + 'm';
+        if (m > 0) return m + 'm ' + String(sec).padStart(2, '0') + 's';
+        return sec + 's';
+      }
+
+      function tick() {
+        const left = expiresAt - Date.now();
+
+        if (left <= 0) {
+          chip.classList.remove('is-soon', 'is-urgent');
+          chip.classList.add('is-done');
+          if (text) text.textContent = chip.dataset.state === 'settled' ? 'Settled' : 'Settling…';
+
+          if (!reloaded && chip.dataset.state === 'live') {
+            reloaded = true;
+            setTimeout(function () { window.location.reload(); }, 4000);
+          }
+          return;
+        }
+
+        if (text) text.textContent = fmt(left);
+        chip.classList.toggle('is-soon', left <= 3600000 && left > 300000);
+        chip.classList.toggle('is-urgent', left <= 300000);
+      }
+
+      tick();
+      setInterval(tick, 1000);
+    })();
+
+    setInterval(function () {
+      if (document.visibilityState === 'visible') refreshHoldings();
+    }, 120000);
+
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible') refreshHoldings();
+    });
+
+    function offsetLimit(pct) {
+      const priceEl = document.getElementById('live-mixer-price');
+      const base = priceEl ? parseFloat(String(priceEl.innerText).replace(/[^0-9eE.+-]/g, '')) : NaN;
+      if (!isFinite(base) || base <= 0) return;
+
+      const target = base * (1 + pct / 100);
+      const input = document.getElementById('limitPrice');
+      if (input) {
+        input.value = target >= 0.01 ? target.toFixed(4) : target.toPrecision(4);
+        input.dispatchEvent(new Event('input'));
+      }
+    }
+
+    (function () {
+      if (READINESS.tradeable) return;
+
+      ['marketButton', 'limitButton'].forEach(function (id) {
+        const b = document.getElementById(id);
+        if (!b) return;
+        b.disabled = true;
+        b.textContent = READINESS.state === 'unpriceable' ? 'Not tradeable' : 'Pricing…';
+        b.title = READINESS.reason || '';
+      });
+      ['marketAmount', 'limitAmount', 'limitPrice'].forEach(function (id) {
+        const i = document.getElementById(id);
+        if (i) i.disabled = true;
+      });
+
+      if (READINESS.state === 'pricing') {
+        setTimeout(function () { window.location.reload(); }, 30000);
+      }
+    })();
+
+    function initButtons() {
+
+      const marketButton = document.getElementById("marketButton");
+      const limitButton = document.getElementById("limitButton");
+
+      if (!READINESS.tradeable) {
+        marketButton.textContent = READINESS.state === 'unpriceable' ? 'Not tradeable' : 'Pricing…';
+        marketButton.disabled = true;
+        marketButton.className =
+          'h-[42px] w-full rounded-[5px] text-[13px] font-semibold bg-[#2a2d34] text-textTertiary cursor-not-allowed';
+      } else {
+        marketButton.textContent = side === "buy" ? "Buy Market" : "Sell Market";
+        marketButton.disabled = false;
+        marketButton.className =
+          'h-[42px] w-full rounded-[5px] text-[13px] font-semibold transition-colors ' +
+          (side === "buy" ? 'bg-[#16a34a] hover:bg-[#15803d]' : 'bg-[#dc2626] hover:bg-[#b91c1c]');
+      }
+
+      marketButton.onclick = () => {
+        const amount = parseFloat(document.getElementById("marketAmount").value);
+        if (!amount || amount <= 0) {
+          return Alerts.error(side === 'sell' ? 'Enter how much ' + MIXER_TICKER + ' to sell' : 'Enter an amount of SOL');
+        }
+        if (side === "sell") {
+
+          const percent = unitsToPercent(amount);
+          if (percent == null) return;
+          return runSell({ units: Math.min(amount, window.POSITION.units), percent: percent, ticker: MIXER_TICKER });
+        }
+        runPurchase(amount);
+      };
+
+      limitButton.onclick = () => {
+        var amount = parseFloat(document.getElementById("limitAmount").value);
+        var price = parseFloat(document.getElementById("limitPrice").value);
+        if (!amount || amount <= 0) {
+          return Alerts.error(side === 'sell' ? 'Enter how much ' + MIXER_TICKER + ' to sell' : 'Enter an amount of SOL');
+        }
+
+        if (side === 'sell') {
+          amount = unitsToPercent(amount);
+          if (amount == null) return;
+        }
+
+        window.MixerLive.placeLimitOrder(side, amount, price);
+      };
+    }
+
+    buyTab.onclick = () => {
+      side = "buy";
+      updateUI();
+
+      if (type === "limit") {
+        setTimeout(() => {
+          const limitPrice = document.getElementById("limitPrice");
+          if (limitPrice && limitPrice.value) {
+            updateLimitOrderLine(parseFloat(limitPrice.value));
+          }
+        }, 100);
+      }
+    };
+
+    sellTab.onclick = () => {
+      side = "sell";
+      updateUI();
+
+      if (type === "limit") {
+        setTimeout(() => {
+          const limitPrice = document.getElementById("limitPrice");
+          if (limitPrice && limitPrice.value) {
+            updateLimitOrderLine(parseFloat(limitPrice.value));
+          }
+        }, 100);
+      }
+    };
+
+    marketTab.onclick = () => { type = "market"; updateUI(); };
+    limitTab.onclick = () => { type = "limit"; updateUI(); };
+
+    updateUI();
+
+  </script>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/alerts.js"></script>
+  <script src="/js/trademodal.js"></script>
+  <script src="/js/purchase.js"></script>
+  <script src="/js/mixerlive.js"></script>
+
+  <%- include('partials/xcard') %>
+</body>
+
+</html>

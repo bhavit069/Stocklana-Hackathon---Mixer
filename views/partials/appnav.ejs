@@ -1,0 +1,476 @@
+<%
+
+  var navUser = typeof user !== 'undefined' ? user : null;
+  var navActive = typeof active !== 'undefined' ? active : '';
+%>
+<nav class="bg-[#0b0d10] border-b border-gray-800 relative z-50">
+  <div class="max-w-full px-4 py-2.5">
+    <div class="flex items-center justify-between">
+
+      <div class="flex items-center gap-6">
+        <a href="/mixers" class="flex items-center shrink-0" aria-label="Mixer home">
+          <svg width="91" height="27" viewBox="0 0 299 88" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M137.292 30.6879C140.364 30.6879 143.076 31.3119 145.428 32.5599C147.828 33.7599 149.7 35.6319 151.044 38.1759C152.436 40.6719 153.132 43.8879 153.132 47.8239V69.9999H141.9V49.5519C141.9 46.4319 141.252 44.1279 139.956 42.6399C138.66 41.1519 136.836 40.4079 134.484 40.4079C132.852 40.4079 131.388 40.7919 130.092 41.5599C128.796 42.2799 127.788 43.3839 127.068 44.8719C126.348 46.3599 125.988 48.2559 125.988 50.5599V69.9999H114.756V49.5519C114.756 46.4319 114.108 44.1279 112.812 42.6399C111.564 41.1519 109.764 40.4079 107.412 40.4079C105.78 40.4079 104.316 40.7919 103.02 41.5599C101.724 42.2799 100.716 43.3839 99.9961 44.8719C99.2761 46.3599 98.9161 48.2559 98.9161 50.5599V69.9999H87.6841V31.2639H98.4121V41.8479L96.3961 38.7519C97.7401 36.1119 99.6361 34.1199 102.084 32.7759C104.58 31.3839 107.412 30.6879 110.58 30.6879C114.132 30.6879 117.228 31.5999 119.868 33.4239C122.556 35.1999 124.332 37.9359 125.196 41.6319L121.236 40.5519C122.532 37.5279 124.596 35.1279 127.428 33.3519C130.308 31.5759 133.596 30.6879 137.292 30.6879ZM163.2 69.9999V31.2639H174.432V69.9999H163.2ZM168.816 25.8639C166.752 25.8639 165.072 25.2639 163.776 24.0639C162.48 22.8639 161.832 21.3759 161.832 19.5999C161.832 17.8239 162.48 16.3359 163.776 15.1359C165.072 13.9359 166.752 13.3359 168.816 13.3359C170.88 13.3359 172.56 13.9119 173.856 15.0639C175.152 16.1679 175.8 17.6079 175.8 19.3839C175.8 21.2559 175.152 22.8159 173.856 24.0639C172.608 25.2639 170.928 25.8639 168.816 25.8639ZM179.96 69.9999L197.312 47.2479L197.096 53.4399L180.464 31.2639H193.064L203.576 45.7359L198.824 45.8799L209.696 31.2639H221.648L204.944 53.2239V47.1759L222.224 69.9999H209.48L198.464 54.5919L203.144 55.2399L192.2 69.9999H179.96ZM245.705 70.5759C241.289 70.5759 237.401 69.7119 234.041 67.9839C230.729 66.2559 228.161 63.9039 226.337 60.9279C224.513 57.9039 223.601 54.4719 223.601 50.6319C223.601 46.7439 224.489 43.3119 226.265 40.3359C228.089 37.3119 230.561 34.9599 233.681 33.2799C236.801 31.5519 240.329 30.6879 244.265 30.6879C248.057 30.6879 251.465 31.5039 254.489 33.1359C257.561 34.7199 259.985 37.0239 261.761 40.0479C263.537 43.0239 264.425 46.5999 264.425 50.7759C264.425 51.2079 264.401 51.7119 264.353 52.2879C264.305 52.8159 264.257 53.3199 264.209 53.7999H232.745V47.2479H258.305L253.985 49.1919C253.985 47.1759 253.577 45.4239 252.761 43.9359C251.945 42.4479 250.817 41.2959 249.377 40.4799C247.937 39.6159 246.257 39.1839 244.337 39.1839C242.417 39.1839 240.713 39.6159 239.225 40.4799C237.785 41.2959 236.657 42.4719 235.841 44.0079C235.025 45.4959 234.617 47.2719 234.617 49.3359V51.0639C234.617 53.1759 235.073 55.0479 235.985 56.6799C236.945 58.2639 238.265 59.4879 239.945 60.3519C241.673 61.1679 243.689 61.5759 245.993 61.5759C248.057 61.5759 249.857 61.2639 251.393 60.6399C252.977 60.0159 254.417 59.0799 255.713 57.8319L261.689 64.3119C259.913 66.3279 257.681 67.8879 254.993 68.9919C252.305 70.0479 249.209 70.5759 245.705 70.5759ZM271.903 69.9999V31.2639H282.631V42.2079L281.119 39.0399C282.271 36.3039 284.119 34.2399 286.663 32.8479C289.207 31.4079 292.303 30.6879 295.951 30.6879V41.0559C295.471 41.0079 295.039 40.9839 294.655 40.9839C294.271 40.9359 293.863 40.9119 293.431 40.9119C290.359 40.9119 287.863 41.7999 285.943 43.5759C284.071 45.3039 283.135 48.0159 283.135 51.7119V69.9999H271.903Z" fill="white"/>
+            <path d="M0.5 69.5776V50.3887L22.7951 29.0678C26.1825 25.7922 29.8552 26.6854 29.8552 30.8445V41.8604C29.8552 44.3478 31.3415 46.8352 35.0574 42.9264L49.5492 29.0678C52.1503 26.225 56.9809 25.8696 56.9809 30.8445V42.9264C56.9809 45.4138 58.5806 45.5817 61.0683 42.9264C64.041 40.0836 68.1284 41.1497 68.5 44.7032V64.9581L64.7842 68.1562C58.0956 74.1971 54.0082 76.6846 53.6366 69.5776V58.2064C53.6366 56.0743 51.5847 55.3015 49.5492 57.1404L38.0301 68.1562C29.4836 76.3292 26.8825 74.1971 26.8825 69.5776V58.5618C26.8825 56.0743 25.226 54.6335 22.7951 57.1404L10.1612 69.5776C5.70219 74.5525 0.500009 76.3292 0.5 69.5776Z" fill="#7453E2" stroke="#7454E3"/>
+          </svg>
+        </a>
+
+        <div class="hidden md:flex gap-4 text-sm">
+          <a href="/mixers" class="<%= navActive === 'mixers' ? 'text-white' : 'text-gray-300' %> hover:text-white transition">Mixers</a>
+          <a href="/portfolio" class="<%= navActive === 'dashboard' ? 'text-white' : 'text-gray-300' %> hover:text-white transition">Portfolio</a>
+          <a href="/stocks" class="<%= navActive === 'stocks' ? 'text-white' : 'text-gray-300' %> hover:text-white transition">Stocks</a>
+          <a href="/meme" class="<%= navActive === 'meme' ? 'text-white' : 'text-gray-300' %> hover:text-white transition">Meme</a>
+          <a href="/wallet" class="<%= navActive === 'wallet' ? 'text-white' : 'text-gray-300' %> hover:text-white transition">Wallet</a>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2.5">
+
+        <button type="button" onclick="navSearch()"
+          class="hidden md:flex items-center gap-1.5 h-8 px-3 rounded-full border-[1.5px]
+                 border-[#2A2C39] hover:border-[#3a3d4d] bg-transparent transition-colors">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M14 14L10.0001 10M11.3333 6.66667C11.3333 9.244 9.244 11.3333 6.66667 11.3333C4.08934 11.3333 2 9.244 2 6.66667C2 4.08934 4.08934 2 6.66667 2C9.244 2 11.3333 4.08934 11.3333 6.66667Z"
+                  stroke="#A1A1AA" stroke-width="1.3" stroke-linecap="round"/>
+          </svg>
+          <span class="text-[12px] text-[#A1A1AA]">Search by Mixer or Address...</span>
+          <kbd class="ml-1 text-[10px] font-medium text-[#71717a] px-1 py-px rounded border border-[#2A2C39]">/</kbd>
+        </button>
+
+        <% if (navActive === 'meme') { %>
+          <a href="/mixer/create?type=meme"
+            class="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg transition hover:brightness-110"
+            style="background: #ffd23f; color: #1a1204;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+              stroke-linecap="round" aria-hidden="true">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            Launch Meme
+          </a>
+        <% } else { %>
+          <a href="/mixer/create"
+            class="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold bg-[#7453E2] hover:bg-[#6344d1] text-white rounded-lg transition">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+              stroke-linecap="round" aria-hidden="true">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            Create Mixer
+          </a>
+        <% } %>
+
+        <div class="relative group/wallet">
+          <div class="flex items-center h-8 min-w-[65px] bg-[#222225] rounded-[20px] cursor-default">
+            <div class="pl-3 flex items-center">
+              <svg width="14" height="14" viewBox="0 0 21 21" fill="none" aria-hidden="true">
+                <path d="M1.1 3.2v13.1a2.75 2.75 0 0 0 2.75 2.75h15a.75.75 0 0 0 .75-.75V7.6a.75.75 0 0 0-.75-.75h-3.75M1.1 3.2a2.13 2.13 0 0 0 2.13 2.13h11.87M1.1 3.2a2.13 2.13 0 0 1 2.13-2.13h10.93a.94.94 0 0 1 .94.94v5.31"
+                      stroke="white" stroke-width="1.6" stroke-linejoin="round"/>
+                <circle cx="14.1" cy="13.1" r="1" stroke="white"/>
+              </svg>
+            </div>
+
+            <div class="w-px h-[18px] bg-[#3a3a3d] mx-2"></div>
+
+            <div class="flex items-center gap-1 pr-2.5">
+              <span id="navSolBalance" class="text-[14px] font-semibold tabular-nums relative -top-px">—</span>
+              <img src="https://axiom-assets.sfo3.cdn.digitaloceanspaces.com/images/sol-fill.svg"
+                   alt="SOL" width="15" height="15">
+            </div>
+          </div>
+
+          <div class="absolute top-[125%] right-0 w-[230px] bg-[#0f1116] border border-[#1f2937]
+                      rounded-xl p-3.5 opacity-0 invisible translate-y-1.5
+                      group-hover/wallet:opacity-100 group-hover/wallet:visible group-hover/wallet:translate-y-0
+                      transition-all duration-200 z-[100]"
+               style="box-shadow: 0 0 0 1px rgba(255,255,255,.02), 0 10px 30px rgba(0,0,0,.6)">
+
+            <div class="flex justify-between items-center mb-3">
+              <span class="text-[12px] text-[#9ca3af] uppercase tracking-[.04em]">Wallet</span>
+              <% if (navUser && navUser.walletAddress) { %>
+                <div class="flex items-center gap-1.5">
+                  <span id="nav-address-display" class="text-[13px] text-[#9ca3af]">
+                    <%= navUser.walletAddress.slice(0, 4) %>…<%= navUser.walletAddress.slice(-4) %>
+                  </span>
+                  <button type="button" class="p-1 rounded-md hover:bg-[#1f2937] transition-colors"
+                          onclick="copyNavAddress('<%= navUser.walletAddress %>')" aria-label="Copy address">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2">
+                      <rect x="9" y="9" width="12" height="12" rx="2"/>
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                    </svg>
+                  </button>
+                </div>
+              <% } %>
+            </div>
+
+            <div class="flex flex-col gap-1 mb-3">
+              <div id="nav-fiat-dropdown" class="text-[18px] font-semibold text-white">$0.00</div>
+              <div class="flex items-center gap-1.5 text-[13px] text-[#9ca3af]">
+                <img src="https://axiom-assets.sfo3.cdn.digitaloceanspaces.com/images/sol-fill.svg" width="13" alt="">
+                <span id="nav-balance-dropdown">— SOL</span>
+                <span class="ml-auto text-[10px] font-semibold text-[#7453E2] bg-[#7453E2]/10 px-1.5 py-0.5 rounded">DEVNET</span>
+              </div>
+            </div>
+
+            <button type="button" onclick="requestDevnetAirdrop()" id="navAirdropBtn"
+              class="w-full py-2 px-2.5 bg-[#171a21] hover:bg-[#20242d] border border-[#2a2f3a]
+                     hover:border-[#3a4150] rounded-lg text-white text-[13px] transition-all">
+              Add Cash
+            </button>
+            <a href="/wallet"
+               class="block w-full mt-1.5 py-2 px-2.5 text-center bg-transparent hover:bg-[#171a21]
+                      border border-[#2a2f3a] rounded-lg text-[#9ca3af] hover:text-white text-[13px] transition-all">
+              My Wallet
+            </a>
+            <p id="navAirdropStatus" class="text-[11px] text-center text-gray-500 mt-2 min-h-[1rem]"></p>
+          </div>
+        </div>
+
+        <% if (navUser) { %>
+          <div class="relative">
+            <button onclick="toggleAppProfileMenu()" type="button"
+              class="relative w-9 h-9 rounded-full overflow-hidden border-2 border-gray-800 hover:border-white transition-colors focus:outline-none">
+              <% if (navUser.xProfilePicture) { %>
+                <img src="<%= navUser.xProfilePicture %>" alt="User" class="w-full h-full object-cover">
+              <% } else { %>
+                <div class="w-full h-full bg-gray-800 flex items-center justify-center text-white font-bold text-sm">
+                  <%= (navUser.username || '?').charAt(0).toUpperCase() %>
+                </div>
+              <% } %>
+            </button>
+
+            <div id="app-profile-menu"
+              class="hidden absolute top-full right-0 mt-3 w-52 bg-[#15161A] border border-gray-800 rounded-xl shadow-xl overflow-hidden py-1 z-50">
+              <div class="px-4 py-3 border-b border-gray-800">
+                <p class="text-white text-sm font-medium truncate"><%= navUser.username %></p>
+                <p class="text-gray-500 text-xs truncate"><%= navUser.email || '' %></p>
+              </div>
+              <% if (navUser.walletAddress) { %>
+                <div class="px-4 py-2 border-b border-gray-800">
+                  <p class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-0.5">Wallet</p>
+                  <p class="text-[11px] font-mono text-gray-400 truncate" title="<%= navUser.walletAddress %>">
+                    <%= navUser.walletAddress.slice(0, 6) %>…<%= navUser.walletAddress.slice(-6) %>
+                  </p>
+                </div>
+              <% } %>
+              <a href="/creator/<%= navUser.userId %>" class="block px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5 transition-colors">My profile</a>
+              <a href="/portfolio" class="block px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5 transition-colors">Portfolio</a>
+              <a href="/wallet" class="block px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5 transition-colors">Wallet</a>
+              <a href="/settings" class="flex items-center justify-between px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5 transition-colors">
+                Settings
+                <% if (!navUser.xUsername) { %>
+                  <span class="w-1.5 h-1.5 rounded-full bg-[#eab308]" title="X not linked"></span>
+                <% } %>
+              </a>
+              <a href="/logout" class="block px-4 py-2.5 text-sm text-red-400 hover:text-red-300 hover:bg-white/5 transition-colors">Log Out</a>
+            </div>
+          </div>
+        <% } %>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<div id="priceStrip"
+     class="h-[1.7rem] flex items-center gap-4 px-4 sm:px-6
+            bg-[#0d0e12] border-b border-[#1c1d24] overflow-x-auto no-scrollbar">
+
+  <div class="flex items-center gap-1.5 shrink-0" title="Solana">
+    <img src="/images/tokens/So11111111111111111111111111111111111111112" alt=""
+         class="w-[13px] h-[13px] rounded-full shrink-0" loading="lazy">
+    <span class="text-[10.5px] font-semibold text-[#8b8f98] tracking-wide">SOL</span>
+    <span id="tickSolPrice" class="text-[11px] font-semibold text-white tabular-nums">&mdash;</span>
+    <span id="tickSolChange" class="text-[10px] font-medium tabular-nums text-[#6b7280]"></span>
+  </div>
+
+  <span class="w-px h-3 bg-[#25262e] shrink-0"></span>
+
+  <div class="flex items-center gap-1.5 shrink-0" title="Bitcoin">
+
+    <svg class="w-[13px] h-[13px] shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="12" fill="#F7931A"/>
+      <path d="M16.5 10.6c.2-1.4-.85-2.15-2.3-2.65l.47-1.9-1.15-.28-.46 1.84c-.3-.07-.62-.14-.93-.21l.46-1.85-1.15-.29-.47 1.9c-.25-.06-.5-.12-.74-.18v-.01l-1.6-.4-.3 1.23s.85.2.84.2c.47.12.55.43.54.67l-.54 2.17c.03.01.07.02.12.04l-.12-.03-.76 3.04c-.06.14-.2.36-.53.28.01.01-.85-.21-.85-.21l-.57 1.32 1.51.38c.28.07.56.14.83.21l-.48 1.92 1.15.29.47-1.9c.31.08.62.16.91.23l-.47 1.89 1.15.29.48-1.92c1.96.37 3.44.22 4.06-1.55.5-1.42-.02-2.24-1.05-2.78.75-.17 1.32-.67 1.47-1.69zm-2.63 3.67c-.36 1.42-2.75.65-3.53.46l.63-2.54c.78.2 3.27.58 2.9 2.08zm.35-3.69c-.32 1.29-2.31.63-2.96.47l.57-2.3c.65.16 2.73.46 2.39 1.83z" fill="#fff"/>
+    </svg>
+    <span class="text-[10.5px] font-semibold text-[#8b8f98] tracking-wide">BTC</span>
+    <span id="tickBtcPrice" class="text-[11px] font-semibold text-white tabular-nums">&mdash;</span>
+    <span id="tickBtcChange" class="text-[10px] font-medium tabular-nums text-[#6b7280]"></span>
+  </div>
+</div>
+
+<% if (navUser && !navUser.xUsername && navActive !== 'settings') { %>
+
+<div id="xLinkAlert" role="status"
+     class="flex items-center gap-3 px-4 sm:px-6 py-2 bg-[#7453E2]/[0.10] border-b border-[#7453E2]/25">
+  <svg class="w-3.5 h-3.5 shrink-0 text-white" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231z"/>
+  </svg>
+  <p class="flex-1 min-w-0 text-[12.5px] text-[#d9d2fb] truncate">
+    <span class="font-semibold text-white">X not linked</span>
+    <span class="text-[#a99be6]"> — link X for a better experience.</span>
+  </p>
+  <a id="xLinkAlertCta" href="/link/x"
+     class="shrink-0 inline-flex items-center h-7 px-3 rounded-md bg-white hover:bg-gray-100 text-black text-[12px] font-semibold transition-colors">
+    Link X
+  </a>
+  <button type="button" id="xLinkAlertClose" aria-label="Dismiss"
+          class="shrink-0 w-6 h-6 rounded-md text-[#a99be6] hover:text-white hover:bg-white/10 transition-colors text-[16px] leading-none">&times;</button>
+</div>
+<script>
+  (function () {
+    var bar = document.getElementById('xLinkAlert');
+
+    try { if (sessionStorage.getItem('mixer.xAlertDismissed')) bar.style.display = 'none'; } catch (e) {}
+
+    var cta = document.getElementById('xLinkAlertCta');
+    cta.href = '/link/x?next=' + encodeURIComponent(location.pathname + location.search);
+    document.getElementById('xLinkAlertClose').addEventListener('click', function () {
+      bar.style.display = 'none';
+      try { sessionStorage.setItem('mixer.xAlertDismissed', '1'); } catch (e) {}
+    });
+  })();
+</script>
+<% } %>
+
+<div id="navSearchOverlay"
+     class="hidden fixed inset-0 z-[100] bg-black/70 backdrop-blur-[2px] flex items-start justify-center px-4 pt-[10vh]">
+  <div class="w-full max-w-[640px] rounded-xl border border-[#2a2c39] bg-[#111218] shadow-2xl overflow-hidden"
+       role="dialog" aria-modal="true" aria-label="Search mixers">
+
+    <div class="flex items-center gap-3 px-5 py-4 border-b border-[#20222c]">
+      <svg width="17" height="17" viewBox="0 0 16 16" fill="none" class="shrink-0" aria-hidden="true">
+        <path d="M14 14L10.0001 10M11.3333 6.66667C11.3333 9.244 9.244 11.3333 6.66667 11.3333C4.08934 11.3333 2 9.244 2 6.66667C2 4.08934 4.08934 2 6.66667 2C9.244 2 11.3333 4.08934 11.3333 6.66667Z"
+              stroke="#71717a" stroke-width="1.4" stroke-linecap="round"/>
+      </svg>
+      <input id="navSearchInput" type="text" autocomplete="off" spellcheck="false"
+             placeholder="Search by name, ticker, token or CA"
+             class="flex-1 bg-transparent text-[15px] text-white placeholder-[#5a5f6b] outline-none border-none">
+      <kbd class="shrink-0 text-[10.5px] font-medium text-[#8b8f98] px-1.5 py-0.5 rounded border border-[#2a2c39] bg-[#1a1b23]">Esc</kbd>
+    </div>
+
+    <div id="navSearchResults" class="max-h-[52vh] overflow-y-auto">
+      <div class="px-5 py-10 text-center text-[13px] text-[#71717a]">Loading…</div>
+    </div>
+  </div>
+</div>
+
+<style>
+  /* The strip scrolls horizontally on narrow screens rather than wrapping,
+     which would break its fixed height. */
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+  /* Written as real CSS, not Tailwind utilities: the active row is toggled
+     from JS, and the Play CDN never emits a class it cannot see in the static
+     markup. */
+  .nav-search-row { background: transparent; border: none; cursor: pointer; }
+  .nav-search-row:hover { background: rgba(255,255,255,.04); }
+  .nav-search-row.is-active { background: rgba(116,83,226,.12); }
+  #navSearchResults::-webkit-scrollbar { width: 8px; }
+  #navSearchResults::-webkit-scrollbar-thumb { background: #2a2c39; border-radius: 4px; }
+  #navSearchResults::-webkit-scrollbar-track { background: transparent; }
+</style>
+
+<script>
+  function toggleAppProfileMenu() {
+    var m = document.getElementById('app-profile-menu');
+    if (m) m.classList.toggle('hidden');
+  }
+  document.addEventListener('click', function (e) {
+    var m = document.getElementById('app-profile-menu');
+    if (!m || m.classList.contains('hidden')) return;
+    if (!e.target.closest('#app-profile-menu') && !e.target.closest('button[onclick="toggleAppProfileMenu()"]')) {
+      m.classList.add('hidden');
+    }
+  });
+</script>
+<script>
+
+  (function () {
+    var overlay, input, list, timer, activeIndex = -1, results = [];
+
+    function fmtPrice(v) {
+      var n = Number(v);
+      if (!isFinite(n) || n <= 0) return null;
+      if (n >= 1000) return n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+      if (n >= 1) return n.toFixed(2);
+      if (n >= 0.01) return n.toFixed(4);
+      if (n >= 0.000001) return n.toFixed(8).replace(/0+$/, '');
+      return n.toExponential(2);
+    }
+
+    function fmtCompact(n) {
+      n = Number(n) || 0;
+      if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
+      if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+      if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+      return n.toFixed(0);
+    }
+
+    function esc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function render(rows) {
+      results = rows || [];
+      activeIndex = results.length ? 0 : -1;
+
+      if (!results.length) {
+        list.innerHTML = '<div class="px-5 py-10 text-center text-[13px] text-[#71717a]">'
+          + 'No mixers match that search.</div>';
+        return;
+      }
+
+      list.innerHTML = results.map(function (r, i) {
+        var img = r.image && r.image.trim()
+          ? r.image
+          : '/images/tokens/' + (r.tokens[0] ? r.tokens[0].address : 'none');
+
+        var price = fmtPrice(r.price);
+        var ch = r.change24h;
+        var hasCh = ch !== null && isFinite(ch);
+
+        var chColour = !hasCh ? '#71717a' : (ch >= 0 ? '#22c55e' : '#f6465d');
+        var chText = !hasCh ? '' : (ch >= 0 ? '+' : '') + Number(ch).toFixed(2) + '%';
+
+        var chips = r.tokens.slice(0, 4).map(function (t) {
+          return '<img src="/images/tokens/' + esc(t.address) + '" alt="" title="' + esc(t.symbol)
+            + '" class="w-[14px] h-[14px] rounded-full border border-[#2a2c39] bg-[#0b0d10]" loading="lazy">';
+        }).join('');
+        if (r.tokenCount > 4) {
+          chips += '<span class="text-[10px] text-[#71717a] ml-0.5">+' + (r.tokenCount - 4) + '</span>';
+        }
+
+        return ''
+          + '<button type="button" data-idx="' + i + '" data-href="/mixer/' + esc(r.mixerId) + '"'
+          + ' class="nav-search-row w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors'
+          + (i === 0 ? ' is-active' : '') + '">'
+          +   '<img src="' + esc(img) + '" alt="" class="w-9 h-9 rounded-lg border border-[#2a2c39] bg-[#0b0d10] object-cover shrink-0" loading="lazy">'
+          +   '<div class="min-w-0 flex-1">'
+          +     '<div class="flex items-center gap-1.5">'
+          +       '<span class="text-[13px] font-semibold text-white truncate">' + esc(r.ticker) + '</span>'
+          +       '<span class="text-[12px] text-[#a1a1aa] truncate">' + esc(r.name) + '</span>'
+          +       (r.expiresAt
+                    ? '<span class="text-[9.5px] font-bold px-1.5 py-[1px] rounded"'
+                      + ' style="color:#b9a4ff;background:rgba(116,83,226,.14);border:1px solid rgba(116,83,226,.4)">MEME</span>'
+                    : '')
+          +       (r.isMine
+                    ? '<span class="text-[9.5px] font-bold px-1.5 py-[1px] rounded"'
+                      + ' style="color:#a78bfa;background:rgba(167,139,250,.12);border:1px solid rgba(167,139,250,.3)">YOURS</span>'
+                    : '')
+          +     '</div>'
+          +     '<div class="flex items-center gap-1 mt-1">' + chips + '</div>'
+          +   '</div>'
+          +   '<div class="text-right shrink-0">'
+          +     '<div class="text-[12.5px] font-semibold text-white tabular-nums">'
+          +       (price ? '$' + price : '<span class="text-[#71717a]">—</span>')
+          +     '</div>'
+          +     '<div class="text-[10.5px] font-medium tabular-nums mt-0.5" style="color:' + chColour + '">'
+          +       (chText || '&nbsp;')
+          +     '</div>'
+          +   '</div>'
+          +   '<div class="text-right shrink-0 w-[62px] hidden sm:block">'
+          +     '<div class="text-[9.5px] text-[#71717a] uppercase tracking-wide">Vol 24h</div>'
+          +     '<div class="text-[11.5px] text-[#d4d4d8] tabular-nums mt-0.5">$' + fmtCompact(r.volume24h) + '</div>'
+          +   '</div>'
+          + '</button>';
+      }).join('');
+    }
+
+    function paintActive() {
+      var rows = list.querySelectorAll('.nav-search-row');
+      for (var i = 0; i < rows.length; i++) {
+        rows[i].classList.toggle('is-active', i === activeIndex);
+      }
+      if (activeIndex >= 0 && rows[activeIndex]) {
+        rows[activeIndex].scrollIntoView({ block: 'nearest' });
+      }
+    }
+
+    function run() {
+      var q = input.value.trim();
+      fetch('/api/search?q=' + encodeURIComponent(q), { headers: { Accept: 'application/json' } })
+        .then(function (r) { return r.json(); })
+        .then(function (b) { render(b.results || []); })
+        .catch(function () {
+          list.innerHTML = '<div class="px-5 py-10 text-center text-[13px] text-[#71717a]">'
+            + 'Search is unavailable right now.</div>';
+        });
+    }
+
+    function open() {
+      overlay.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+      input.value = '';
+      input.focus();
+      run();
+    }
+
+    function close() {
+      overlay.classList.add('hidden');
+      document.body.style.overflow = '';
+    }
+
+    function go(i) {
+      var r = results[i];
+      if (r) window.location.href = '/mixer/' + r.mixerId;
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+      overlay = document.getElementById('navSearchOverlay');
+      input = document.getElementById('navSearchInput');
+      list = document.getElementById('navSearchResults');
+      if (!overlay || !input || !list) return;
+
+      window.navSearch = open;
+
+      input.addEventListener('input', function () {
+        clearTimeout(timer);
+        timer = setTimeout(run, 180);
+      });
+
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          if (results.length) { activeIndex = (activeIndex + 1) % results.length; paintActive(); }
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          if (results.length) { activeIndex = (activeIndex - 1 + results.length) % results.length; paintActive(); }
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          if (activeIndex >= 0) go(activeIndex);
+        }
+      });
+
+      list.addEventListener('click', function (e) {
+        var row = e.target.closest('.nav-search-row');
+        if (row) go(Number(row.dataset.idx));
+      });
+
+      overlay.addEventListener('mousedown', function (e) {
+        if (e.target === overlay) close();
+      });
+
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && !overlay.classList.contains('hidden')) close();
+
+        if (e.key === '/' && overlay.classList.contains('hidden')) {
+          var t = e.target;
+          var typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+          if (!typing) { e.preventDefault(); open(); }
+        }
+      });
+    });
+  })();
+
+  function copyNavAddress(addr) {
+    navigator.clipboard.writeText(addr).then(function () {
+      var el = document.getElementById('nav-address-display');
+      if (!el) return;
+      var prev = el.textContent;
+      el.textContent = 'Copied';
+      setTimeout(function () { el.textContent = prev; }, 1200);
+    });
+  }
+</script>
+<script src="/js/navbalance.js"></script>
+<script src="/js/navticker.js"></script>

@@ -1,0 +1,61 @@
+<%- include('partials/head') %>
+
+    <div
+        class="w-full max-w-md bg-surface p-8 rounded-2xl shadow-2xl border border-gray-800/50 relative overflow-hidden backdrop-blur-sm">
+        <div class="mb-8">
+            <h2 class="text-3xl font-bold tracking-tight text-white">Final Step</h2>
+            <p class="text-textSecondary mt-2 text-sm">Complete your profile to access your wallet.</p>
+        </div>
+
+        <% if (error) { %>
+            <div class="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-lg mb-6 text-sm text-center">
+                <%= error %>
+            </div>
+            <% } %>
+
+                <form action="/complete-x-signup" method="POST" class="space-y-4">
+                    <div class="group">
+                        <label
+                            class="block text-xs font-medium text-textSecondary mb-1.5 uppercase tracking-wide group-focus-within:text-primary transition-colors">Username</label>
+                        <input type="text" name="username" value="<%= username %>" required
+                            class="w-full bg-input border border-gray-800 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all placeholder-gray-600">
+                        <p class="text-[10px] text-textSecondary mt-1">We've pre-filled this from X, but you can change
+                            it.</p>
+                    </div>
+
+                    <div class="group">
+                        <label
+                            class="block text-xs font-medium text-textSecondary mb-1.5 uppercase tracking-wide group-focus-within:text-primary transition-colors">Email
+                            Address</label>
+                        <input type="email" name="email" value="<%= typeof email !== 'undefined' ? email : '' %>"
+                            required
+                            class="w-full bg-input border border-gray-800 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all placeholder-gray-600"
+                            placeholder="name@company.com">
+                    </div>
+
+                    <div class="group">
+                        <label
+                            class="block text-xs font-medium text-textSecondary mb-1.5 uppercase tracking-wide group-focus-within:text-primary transition-colors">Create
+                            Password</label>
+                        <input type="password" name="password" required
+                            class="w-full bg-input border border-gray-800 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all placeholder-gray-600"
+                            placeholder="••••••••">
+                    </div>
+
+                    <div class="group">
+                        <label
+                            class="block text-xs font-medium text-textSecondary mb-1.5 uppercase tracking-wide group-focus-within:text-primary transition-colors">Referral
+                            Code (Optional)</label>
+                        <input type="text" name="referralCode"
+                            class="w-full bg-input border border-gray-800 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all placeholder-gray-600"
+                            placeholder="077b-4bde-4d20-9e0a-c776">
+                    </div>
+
+                    <button type="submit"
+                        class="w-full bg-primary hover:bg-primary/90 text-white font-medium py-3 rounded-lg transition-transform transform active:scale-[0.98] shadow-lg shadow-primary/20 mt-2">
+                        Create Account
+                    </button>
+                </form>
+    </div>
+
+    <%- include('partials/footer') %>

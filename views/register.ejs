@@ -1,0 +1,71 @@
+<%- include('partials/head') %>
+
+    <div
+        class="w-full max-w-md bg-surface p-8 rounded-2xl shadow-2xl border border-gray-800/50 relative overflow-hidden backdrop-blur-sm">
+
+        <div
+            class="absolute top-0 right-0 w-32 h-32 bg-primary/20 blur-[60px] rounded-full -mr-16 -mt-16 pointer-events-none">
+        </div>
+
+        <div class="mb-8">
+            <h2 class="text-3xl font-bold tracking-tight text-white">Create Account</h2>
+            <p class="text-textSecondary mt-2 text-sm">Join us and get your embedded wallet instantly</p>
+        </div>
+
+        <% if (error) { %>
+            <div class="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-lg mb-6 text-sm text-center">
+                <%= error %>
+            </div>
+            <% } %>
+
+                <form action="/register" method="POST" class="space-y-4">
+                    <div class="group">
+                        <label
+                            class="block text-xs font-medium text-textSecondary mb-1.5 uppercase tracking-wide group-focus-within:text-primary transition-colors">Username</label>
+                        <input type="text" name="username" required
+                            class="w-full bg-input border border-gray-800 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all placeholder-gray-600"
+                            placeholder="johndoe">
+                    </div>
+                    <div class="group">
+                        <label
+                            class="block text-xs font-medium text-textSecondary mb-1.5 uppercase tracking-wide group-focus-within:text-primary transition-colors">Email
+                            Address</label>
+                        <input type="email" name="email" required
+                            class="w-full bg-input border border-gray-800 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all placeholder-gray-600"
+                            placeholder="name@company.com">
+                    </div>
+                    <div class="group">
+                        <label
+                            class="block text-xs font-medium text-textSecondary mb-1.5 uppercase tracking-wide group-focus-within:text-primary transition-colors">Password</label>
+                        <input type="password" name="password" required
+                            class="w-full bg-input border border-gray-800 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all placeholder-gray-600"
+                            placeholder="••••••••">
+                    </div>
+                    <div class="group">
+                        <label
+                            class="block text-xs font-medium text-textSecondary mb-1.5 uppercase tracking-wide group-focus-within:text-primary transition-colors">Referral
+                            Code (Optional)</label>
+                        <input type="text" name="referralCode"
+                            class="w-full bg-input border border-gray-800 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all placeholder-gray-600"
+                            placeholder="077b-4bde-4d20-9e0a-c776">
+                    </div>
+
+                    <button type="submit"
+                        class="w-full bg-primary hover:bg-primary/90 text-white font-medium py-3 rounded-lg transition-transform transform active:scale-[0.98] shadow-lg shadow-primary/20 mt-2">
+                        Create Account & Wallet
+                    </button>
+                </form>
+
+                <div class="my-6 flex items-center justify-between">
+                    <span class="h-px bg-gray-800 w-full"></span>
+                    <span class="px-2 text-xs text-textSecondary whitespace-nowrap">ALREADY REGISTERED?</span>
+                    <span class="h-px bg-gray-800 w-full"></span>
+                </div>
+
+                <div class="text-center">
+                    <a href="/login" class="text-sm text-textSecondary hover:text-white transition-colors">Sign in to
+                        your account</a>
+                </div>
+    </div>
+
+    <%- include('partials/footer') %>
